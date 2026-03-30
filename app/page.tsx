@@ -8,7 +8,7 @@ import {
   Stethoscope, Activity, FileWarning, Search, Lock, ChevronRight, 
   ArrowLeft, X, Microscope, Check, Circle, ArrowRight, BarChart2,
   Calendar, Flag, Delete, User, ArrowUpDown, UserPlus, FileEdit,
-  Info, Globe, Clock, Mail, ChevronDown, Plus, ArrowUp, ArrowDown, Link
+  Info, Globe, Clock, Mail, ChevronDown, Plus, ArrowUp, ArrowDown, Link, HelpCircle
 } from 'lucide-react';
 
 const IconMap: Record<string, any> = {
@@ -177,6 +177,8 @@ export default function App() {
   const [wzCheckConfirm, setWzCheckConfirm] = useState<{step: number, index: number} | null>(null);
   const [editTask, setEditTask] = useState<{pid: string, task: any} | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [emailEnabled, setEmailEnabled] = useState(false);
@@ -335,6 +337,14 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [screen]);
 
+  const handleLoginSuccess = () => {
+    setScreen('dashboard');
+    if (typeof window !== 'undefined' && !localStorage.getItem('altesa_welcomed')) {
+      setShowWelcome(true);
+      localStorage.setItem('altesa_welcomed', 'true');
+    }
+  };
+
   const handlePin = (k: string) => {
     if (k === 'del') {
       setPin(prev => prev.slice(0, -1));
@@ -342,7 +352,7 @@ export default function App() {
     } else if (k === 'go') {
       if (pin.length >= 4) {
         setPinErr('');
-        setScreen('dashboard');
+        handleLoginSuccess();
       } else {
         setPinErr('Minimum 4 digits required');
       }
@@ -352,7 +362,7 @@ export default function App() {
         setPinErr('');
       }
       if (pin.length + 1 === 8) {
-        setTimeout(() => setScreen('dashboard'), 200);
+        setTimeout(() => handleLoginSuccess(), 200);
       }
     }
   };
@@ -637,6 +647,7 @@ export default function App() {
             <span className="hdr-context">VPV Study · Coordinator View</span>
           </div>
           <div className="hdr-right">
+            <button type="button" className="ibtn" onClick={() => setHelpOpen(true)} title="Help Centre"><HelpCircle size={14} /> Help</button>
             <button type="button" className="ibtn relative" onClick={() => setNotifOpen(true)} title="Notifications">
               <Bell size={14} />
               {notifications.filter(n => !n.read).length > 0 && (
@@ -862,7 +873,7 @@ export default function App() {
           <div className="modal-overlay" style={{ zIndex: 800 }}>
             <div className="modal-card" style={{ maxWidth: '480px' }}>
               <div className="modal-hdr">
-                <div className="modal-title">Notification Center</div>
+                <div className="modal-title">Notification Centre</div>
                 <button className="ibtn" onClick={() => setNotifOpen(false)}><X size={16} /></button>
               </div>
               <div className="modal-body" style={{ padding: '0' }}>
@@ -933,6 +944,14 @@ export default function App() {
           </div>
         )}
         {cmdOpen && <CmdPalette q={cmdQ} setQ={setCmdQ} onClose={() => setCmdOpen(false)} onSelect={(id: string) => { if (id === 'dashboard') setScreen('dashboard'); else openPatient(id); }} patients={patients} recentIds={recentIds} />}
+        
+        {(helpOpen || showWelcome) && (
+          <HelpModal 
+            onClose={() => { setHelpOpen(false); setShowWelcome(false); }} 
+            initialTab={showWelcome ? 'guide' : 'guide'} 
+          />
+        )}
+        
         <Toasts toasts={toasts} />
       </div>
     );
@@ -1209,6 +1228,7 @@ export default function App() {
       <div className="hdr">
         <div className="hdr-left"><div className="wordmark">ALTE<em>SA</em></div><span className="hdr-context">{p.id} · {p.phaseLabel}</span></div>
         <div className="hdr-right">
+          <button className="ibtn" onClick={() => setHelpOpen(true)} title="Help Centre"><HelpCircle size={14} /> Help</button>
           <button className="ibtn relative" onClick={() => setNotifOpen(true)} title="Notifications">
             <Bell size={14} />
             {notifications.filter(n => !n.read).length > 0 && (
@@ -1613,7 +1633,7 @@ export default function App() {
                 onChange={e => {
                   const d = e.target.value ? new Date(e.target.value + 'T12:00:00') : undefined;
                   if (d && d > new Date()) {
-                    setDateError("¡Ups! Parece que has seleccionado una fecha en el futuro. Por favor, elige una fecha válida (hoy o anterior).");
+                    setDateError("Oops! It looks like you've selected a date in the future. Please choose a valid date (today or earlier).");
                   } else {
                     setDateError(null);
                     setEditTask({ ...editTask, task: { ...editTask.task, dueDate: d } });
@@ -1699,7 +1719,7 @@ export default function App() {
         <div className="modal-overlay" style={{ zIndex: 800 }}>
           <div className="modal-card" style={{ maxWidth: '480px' }}>
             <div className="modal-hdr">
-              <div className="modal-title">Notification Center</div>
+              <div className="modal-title">Notification Centre</div>
               <button className="ibtn" onClick={() => setNotifOpen(false)}><X size={16} /></button>
             </div>
             <div className="modal-body" style={{ padding: '0' }}>
@@ -1770,7 +1790,111 @@ export default function App() {
         </div>
       )}
 
+      {(helpOpen || showWelcome) && (
+        <HelpModal 
+          onClose={() => { setHelpOpen(false); setShowWelcome(false); }} 
+          initialTab={showWelcome ? 'guide' : 'guide'} 
+        />
+      )}
+
       <Toasts toasts={toasts} />
+    </div>
+  );
+}
+
+function HelpModal({ onClose, initialTab = 'guide' }: { onClose: () => void, initialTab?: string }) {
+  const [tab, setTab] = useState(initialTab);
+  return (
+    <div className="modal-overlay" style={{ zIndex: 900 }}>
+      <div className="modal-card" style={{ maxWidth: '600px', padding: 0 }}>
+        <div className="modal-hdr" style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)' }}>
+          <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <HelpCircle size={18} color="var(--blue)" /> 
+            Help &amp; Learning Centre
+          </div>
+          <button className="ibtn" onClick={onClose}><X size={16} /></button>
+        </div>
+        <div className="modal-body" style={{ padding: 0 }}>
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg)', padding: '0 16px' }}>
+            <button className={`tab-btn ${tab === 'guide' ? 'active' : ''}`} onClick={() => setTab('guide')} style={{ padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `2px solid ${tab === 'guide' ? 'var(--blue)' : 'transparent'}`, fontSize: '13px', fontWeight: 600, color: tab === 'guide' ? 'var(--blue)' : 'var(--t2)', cursor: 'pointer' }}>Quick Guide</button>
+            <button className={`tab-btn ${tab === 'glossary' ? 'active' : ''}`} onClick={() => setTab('glossary')} style={{ padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `2px solid ${tab === 'glossary' ? 'var(--blue)' : 'transparent'}`, fontSize: '13px', fontWeight: 600, color: tab === 'glossary' ? 'var(--blue)' : 'var(--t2)', cursor: 'pointer' }}>Glossary</button>
+            <button className={`tab-btn ${tab === 'shortcuts' ? 'active' : ''}`} onClick={() => setTab('shortcuts')} style={{ padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `2px solid ${tab === 'shortcuts' ? 'var(--blue)' : 'transparent'}`, fontSize: '13px', fontWeight: 600, color: tab === 'shortcuts' ? 'var(--blue)' : 'var(--t2)', cursor: 'pointer' }}>Shortcuts</button>
+          </div>
+          <div style={{ padding: '24px', maxHeight: '60vh', overflowY: 'auto', fontSize: '13px', lineHeight: '1.6', color: 'var(--t2)' }}>
+            {tab === 'guide' && (
+              <div>
+                <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '16px', color: 'var(--t1)' }}>Welcome to the ALTESA Coordination Platform!</h3>
+                <p style={{ marginBottom: '16px' }}>This platform is designed to help you manage patients through the different phases of the VPV study. Here is a summary of how to use the main features:</p>
+                
+                <div style={{ marginBottom: '24px' }}>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--t1)', display: 'flex', alignItems: 'center', gap: '6px' }}><Home size={14} /> 1. Dashboard</h4>
+                  <p style={{ margin: 0 }}>The main dashboard shows all your active patients. Pay special attention to the <strong>Alerts</strong> at the top. Patients with a <strong>Positive DTQ</strong> alert require immediate action (within the next 48 hours).</p>
+                </div>
+
+                <div style={{ marginBottom: '24px' }}>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--t1)', display: 'flex', alignItems: 'center', gap: '6px' }}><User size={14} /> 2. Patient View and Tasks</h4>
+                  <p style={{ marginBottom: '8px' }}>By clicking on a patient, you will see their detailed timeline and task list. Tasks are grouped by category (Questionnaires, Procedures, Laboratories, Administrative).</p>
+                  <ul style={{ paddingLeft: '20px', margin: 0 }}>
+                    <li style={{ marginBottom: '6px' }}><strong>Complete Tasks:</strong> Click the circle next to a task to mark it as completed.</li>
+                    <li style={{ marginBottom: '6px' }}><strong>Dependencies:</strong> Some tasks depend on others. Look for the <span style={{ background: 'var(--amber-bg)', color: 'var(--amber)', padding: '2px 4px', borderRadius: '4px', fontSize: '10px' }}>PREREQUISITE</span> and <span style={{ background: 'var(--blue-bg)', color: 'var(--blue)', padding: '2px 4px', borderRadius: '4px', fontSize: '10px' }}>DEPENDENT</span> tags. Click &quot;Trace Flow&quot; to see visual lines connecting the tasks.</li>
+                    <li style={{ marginBottom: '6px' }}><strong>Due Dates:</strong> Tasks with a red dot are overdue or due today.</li>
+                  </ul>
+                </div>
+
+                <div style={{ marginBottom: '24px' }}>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--t1)', display: 'flex', alignItems: 'center', gap: '6px' }}><AlertTriangle size={14} /> 3. The RV Protocol (Positive DTQ)</h4>
+                  <p style={{ margin: 0 }}>If a patient reports new symptoms (DTQ task), the system will ask if the result is Positive or Negative. A <strong>Positive</strong> result triggers the RV Protocol Wizard, which will guide you through the critical steps before randomisation.</p>
+                </div>
+              </div>
+            )}
+            {tab === 'glossary' && (
+              <div>
+                <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '16px', color: 'var(--t1)' }}>Study Terms Glossary</h3>
+                <div style={{ display: 'grid', gap: '16px' }}>
+                  <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--t1)', marginBottom: '4px' }}>PSB (Pre-Symptomatic Baseline)</div>
+                    <div>The phase where patients report daily symptoms via ePRO. We need at least 3 records to establish a baseline before any infection.</div>
+                  </div>
+                  <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--t1)', marginBottom: '4px' }}>DTQ (Daily Trigger Questionnaire)</div>
+                    <div>A daily questionnaire asking if the patient has new respiratory symptoms. A positive response triggers the RV Protocol.</div>
+                  </div>
+                  <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--t1)', marginBottom: '4px' }}>RV Protocol (Rhinovirus)</div>
+                    <div>The time-critical phase (48h + 6h window) starting from symptom onset, leading to randomisation and treatment.</div>
+                  </div>
+                  <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--t1)', marginBottom: '4px' }}>E-RS / PGIS</div>
+                    <div>Evaluating Respiratory Symptoms scales. Used to calculate the PSB and track symptom resolution during treatment.</div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {tab === 'shortcuts' && (
+              <div>
+                <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '16px', color: 'var(--t1)' }}>Keyboard Shortcuts</h3>
+                <div style={{ display: 'grid', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '12px' }}>
+                    <kbd style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'var(--fm)', fontSize: '11px', color: 'var(--t1)', boxShadow: '0 1px 1px rgba(0,0,0,0.05)' }}>⌘ + K</kbd>
+                    <span>Open Quick Search / Command Palette</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '12px' }}>
+                    <kbd style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'var(--fm)', fontSize: '11px', color: 'var(--t1)', boxShadow: '0 1px 1px rgba(0,0,0,0.05)' }}>Esc</kbd>
+                    <span>Close modals or search</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '12px' }}>
+                    <kbd style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'var(--fm)', fontSize: '11px', color: 'var(--t1)', boxShadow: '0 1px 1px rgba(0,0,0,0.05)' }}>Space</kbd> <span style={{ fontSize: '11px' }}>or</span> <kbd style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'var(--fm)', fontSize: '11px', color: 'var(--t1)', boxShadow: '0 1px 1px rgba(0,0,0,0.05)' }}>Enter</kbd>
+                    <span>Check/uncheck focused task</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="modal-footer" style={{ background: 'var(--bg)', borderTop: '1px solid var(--border)', padding: '16px 24px' }}>
+          <button className="btn btn-primary w-full" style={{ width: '100%', justifyContent: 'center' }} onClick={onClose}>Understood!</button>
+        </div>
+      </div>
     </div>
   );
 }
