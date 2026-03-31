@@ -136,6 +136,17 @@ const DependencyLines = ({ activeTrace, p, taskListRef }: { activeTrace: string 
   );
 };
 
+const GLOSSARY = [
+  { term: 'PSB', def: 'Pre-Symptomatic Baseline. The phase where patients report daily symptoms before infection.' },
+  { term: 'DTQ', def: 'Daily Trigger Questionnaire. Asks if the patient has new respiratory symptoms.' },
+  { term: 'RV', def: 'Rhinovirus. The protocol triggered after a positive DTQ.' },
+  { term: 'E-RS', def: 'Evaluating Respiratory Symptoms scales.' },
+  { term: 'ePRO', def: 'Electronic Patient-Reported Outcomes.' },
+  { term: 'WURSS', def: 'Wisconsin Upper Respiratory Symptom Survey.' },
+  { term: 'SABD', def: 'Short-Acting Bronchodilator.' },
+  { term: 'WOCBP', def: 'Women of Childbearing Potential.' }
+];
+
 export default function App() {
   const [patients, setPatients] = useState<Patient[]>(() => 
     PATIENTS.map(p => ({ ...p, studyDay: diffDays(p.screeningDate, TODAY) }))
@@ -178,6 +189,7 @@ export default function App() {
   const [editTask, setEditTask] = useState<{pid: string, task: any} | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [briefingOpen, setBriefingOpen] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -339,9 +351,9 @@ export default function App() {
 
   const handleLoginSuccess = () => {
     setScreen('dashboard');
-    if (typeof window !== 'undefined' && !localStorage.getItem('altesa_welcomed')) {
-      setShowWelcome(true);
-      localStorage.setItem('altesa_welcomed', 'true');
+    if (typeof window !== 'undefined' && !localStorage.getItem('altesa_briefed_today')) {
+      setBriefingOpen(true);
+      localStorage.setItem('altesa_briefed_today', fmtISO(TODAY));
     }
   };
 
@@ -644,25 +656,34 @@ export default function App() {
         <div className="hdr">
           <div className="hdr-left">
             <div className="wordmark">ALTE<em>SA</em></div>
-            <span className="hdr-context">VPV Study · Coordinator View</span>
+            <span className="hdr-context">VPV Study</span>
+          </div>
+          <div className="hdr-center">
+            <button className="search-trigger" onClick={() => setCmdOpen(true)}>
+              <Search size={14} />
+              <span>Search patients, tasks, or glossary...</span>
+              <span className="search-shortcut">⌘K</span>
+            </button>
           </div>
           <div className="hdr-right">
-            <button type="button" className="ibtn" onClick={() => setHelpOpen(true)} title="Help Centre"><HelpCircle size={14} /> Help</button>
-            <button type="button" className="ibtn relative" onClick={() => setNotifOpen(true)} title="Notifications">
-              <Bell size={14} />
-              {notifications.filter(n => !n.read).length > 0 && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-              )}
-            </button>
-            <button type="button" className="ibtn" onClick={(e) => { e.preventDefault(); setAddPatientOpen(true); }} title="Add Patient"><UserPlus size={14} /> Add Patient</button>
-            <button type="button" className="ibtn" onClick={(e) => { e.preventDefault(); setCmdOpen(true); }} title="Quick Search (⌘K)"><Search size={14} /> Search</button>
-            <button type="button" className="ibtn" onClick={(e) => { e.preventDefault(); setPin(''); setScreen('auth'); }}><Lock size={14} /> Lock</button>
+            <div className="nav-group">
+              <button type="button" className="ibtn" onClick={() => setBriefingOpen(true)} title="Daily Briefing"><ClipboardList size={14} /> Briefing</button>
+              <button type="button" className="ibtn relative" onClick={() => setNotifOpen(true)} title="Notifications">
+                <Bell size={14} />
+                {notifications.filter(n => !n.read).length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                )}
+              </button>
+              <button type="button" className="ibtn" onClick={() => setHelpOpen(true)} title="Help & Glossary"><HelpCircle size={14} /> Help</button>
+            </div>
+            <button type="button" className="btn btn-primary" style={{ minHeight: '36px', padding: '8px 16px' }} onClick={(e) => { e.preventDefault(); setAddPatientOpen(true); }} title="Add Patient"><UserPlus size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Add Patient</button>
+            <button type="button" className="ibtn" style={{ border: 'none', background: 'transparent' }} onClick={(e) => { e.preventDefault(); setPin(''); setScreen('auth'); }} title="Lock Session"><Lock size={14} /></button>
           </div>
         </div>
         <div className="dash">
           <div className="summary">
             <div className="sum-cell"><div className="sum-v">{patients.length}</div><div className="sum-l">Active Patients</div></div>
-            <div className="sum-cell alert"><div className="sum-v">{crits.length}</div><div className="sum-l">DTQ+ Alerts</div></div>
+            <div className="sum-cell alert"><div className="sum-v">{crits.length}</div><div className="sum-l"><abbr title="Daily Trigger Questionnaire (Positive)" className="help-term">DTQ+</abbr> Alerts</div></div>
             <div className="sum-cell warn"><div className="sum-v">{warns.length}</div><div className="sum-l">Pending Actions</div></div>
             <div className="sum-cell"><div className="sum-v">{clinicToday.length}</div><div className="sum-l">Clinic Visits Today</div></div>
           </div>
@@ -704,7 +725,7 @@ export default function App() {
                     <div className="mini-tl">
                       <div className="mini-tl-bar">
                         <div className="tl-seg s-scr" title="Screening / Rescreening"><span>SCR</span></div>
-                        <div className="tl-seg s-psb" title="Pre-Symptomatic Baseline (Asymptomatic Phase)"><span>{p.phaseCode === 'psb' ? 'PSB W' + Math.floor((p.studyDay || 0) / 7) : 'PSB'}</span></div>
+                        <div className="tl-seg s-psb" title="Pre-Symptomatic Baseline (Asymptomatic Phase)"><span className="help-term">{p.phaseCode === 'psb' ? 'PSB W' + Math.floor((p.studyDay || 0) / 7) : 'PSB'}</span></div>
                         <div className="tl-seg s-rv" title="RV Infection — Randomisation window"></div>
                         <div className="tl-seg s-tx" title="Treatment Period D1–D42"><span>{p.phaseCode === 'tx' ? 'Tx D' + (p.studyDay || 0) : 'TX'}</span></div>
                         <div className="tl-seg s-fu" title="Follow-up Period"><span>FUP</span></div>
@@ -730,10 +751,30 @@ export default function App() {
                   </div>
                 </div>
               );
-            }) : <div className="pt-list-empty">No patients in this category</div>}
+            }) : (
+              <div className="empty-state-card">
+                <div className="empty-icon"><UserPlus size={32} /></div>
+                <h3>Welcome to ALTESA Study Tracker</h3>
+                <p>Your dashboard is currently empty. Get started by adding your first patient or reviewing the study quick guide.</p>
+                <div className="empty-actions">
+                  <button className="btn btn-primary" onClick={() => setAddPatientOpen(true)}><UserPlus size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Add First Patient</button>
+                  <button className="btn btn-ghost" onClick={() => setHelpOpen(true)}><HelpCircle size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Read Quick Guide</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
         {/* Modals */}
+        {briefingOpen && (
+          <DailyBriefing 
+            patients={patients} 
+            onClose={() => setBriefingOpen(false)} 
+            onSelectPatient={(id) => {
+              openPatient(id);
+              setBriefingOpen(false);
+            }}
+          />
+        )}
         {addPatientOpen && (
           <div className="modal-overlay" onClick={() => { setAddPatientOpen(false); setModalErr(""); }}>
             <div className="modal-card" onClick={e => e.stopPropagation()}>
@@ -1798,6 +1839,101 @@ export default function App() {
       )}
 
       <Toasts toasts={toasts} />
+    </div>
+  );
+}
+
+function DailyBriefing({ patients, onClose, onSelectPatient }: { patients: Patient[], onClose: () => void, onSelectPatient: (id: string) => void }) {
+  const crits = patients.filter(p => p.alert === 'DTQ_POSITIVE');
+  const overdueTasks: any[] = [];
+  const clinicToday = patients.filter(p => p.loc.includes('CLINIC'));
+  
+  patients.forEach(p => {
+    const allTasks = [...(p.tasks.q || []), ...(p.tasks.pr || []), ...(p.tasks.l || []), ...(p.tasks.ad || [])];
+    allTasks.forEach(t => {
+      if (!t.done && t.dueDate) {
+        const diff = diffDays(TODAY, t.dueDate);
+        if (diff < 0) {
+          overdueTasks.push({ pid: p.id, task: t, diff: Math.abs(diff) });
+        }
+      }
+    });
+  });
+
+  return (
+    <div className="briefing-overlay">
+      <div className="briefing-card">
+        <div className="briefing-hdr">
+          <div className="briefing-title">Good morning, Coordinator</div>
+          <div className="briefing-sub">
+            <Calendar size={14} /> {fmtHuman(TODAY)}, {fmtISO(TODAY)}
+            <span style={{ margin: '0 8px', opacity: 0.3 }}>|</span>
+            <Clock size={14} /> Shift Summary
+          </div>
+        </div>
+        <div className="briefing-body">
+          <div className="brief-sec">
+            <div className="brief-sec-title"><AlertTriangle size={14} /> Critical Actions Required</div>
+            {crits.length > 0 ? crits.map(p => (
+              <div key={p.id} className="brief-item crit" onClick={() => onSelectPatient(p.id)}>
+                <div className="brief-icon"><AlertTriangle size={20} /></div>
+                <div className="brief-content">
+                  <div className="brief-pt-id">{p.id} — {p.name}</div>
+                  <div className="brief-msg">RV Protocol Active: Randomisation window is running</div>
+                  <div className="brief-meta">Symptom onset reported. Action required within 48h+6h window.</div>
+                </div>
+                <ChevronRight size={16} color="var(--t4)" />
+              </div>
+            )) : (
+              <div style={{ padding: '16px', background: 'var(--green-bg)', color: 'var(--green)', borderRadius: 'var(--r2)', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CheckCircle2 size={16} /> No patients currently in the critical RV window.
+              </div>
+            )}
+          </div>
+
+          <div className="briefing-grid">
+            <div className="brief-sec">
+              <div className="brief-sec-title"><Hospital size={14} /> Clinic Visits Today</div>
+              {clinicToday.length > 0 ? clinicToday.map(p => (
+                <div key={p.id} className="brief-item today" onClick={() => onSelectPatient(p.id)}>
+                  <div className="brief-icon"><Hospital size={18} /></div>
+                  <div className="brief-content">
+                    <div className="brief-pt-id">{p.id}</div>
+                    <div className="brief-msg">{p.phaseLabel.split('·')[0]} Visit</div>
+                    <div className="brief-meta">Scheduled for today in clinic.</div>
+                  </div>
+                </div>
+              )) : (
+                <div style={{ fontSize: '13px', color: 'var(--t3)', padding: '8px 0' }}>No clinic visits scheduled for today.</div>
+              )}
+            </div>
+
+            <div className="brief-sec">
+              <div className="brief-sec-title"><Clock size={14} /> Overdue Tasks</div>
+              {overdueTasks.length > 0 ? overdueTasks.slice(0, 4).map((item, i) => (
+                <div key={i} className="brief-item warn" onClick={() => onSelectPatient(item.pid)}>
+                  <div className="brief-icon"><Clock size={18} /></div>
+                  <div className="brief-content">
+                    <div className="brief-pt-id">{item.pid}</div>
+                    <div className="brief-msg">{item.task.label}</div>
+                    <div className="brief-meta">Overdue by {item.diff} day{item.diff !== 1 ? 's' : ''}.</div>
+                  </div>
+                </div>
+              )) : (
+                <div style={{ fontSize: '13px', color: 'var(--green)', padding: '8px 0' }}>All tasks are up to date.</div>
+              )}
+              {overdueTasks.length > 4 && (
+                <div style={{ fontSize: '11px', color: 'var(--t3)', textAlign: 'center', marginTop: '8px' }}>
+                  + {overdueTasks.length - 4} more overdue tasks
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="brief-footer">
+          <button className="btn btn-primary" style={{ padding: '12px 32px' }} onClick={onClose}>Start My Shift</button>
+        </div>
+      </div>
     </div>
   );
 }
