@@ -48,6 +48,18 @@ export type Task = {
   dependsOn?: string[];
 };
 
+export type Document = {
+  id: string;
+  name: string;
+  category: 'ICF' | 'LAB' | 'ECG' | 'IMG' | 'OTHER';
+  extension: string;
+  uploadDate: Date;
+  visitId?: string;
+  url: string;
+  size: string;
+  critical?: boolean;
+};
+
 export type Patient = {
   id: string;
   name: string;
@@ -77,6 +89,7 @@ export type Patient = {
   nextVisit: Date;
   nextVisitLabel: string;
   labNote?: string;
+  documents: Document[];
 };
 
 export const PATIENTS: Patient[] = [
@@ -101,6 +114,10 @@ export const PATIENTS: Patient[] = [
     ers: [7, 6, 8, 7, 9, 8, 7, 6, 5, 7, 8, 7, 6, 8, 9, 10, 9, 8, 7, 6, 7, 8, 9, 11, 10, 9, 8, 7, 8, 9],
     psb: 7.4, psbRecords: 94,
     nextVisit: TODAY, nextVisitLabel: 'RV Clinic Visit (URGENT)',
+    documents: [
+      { id: 'd1', name: 'Informed Consent v2.0', category: 'ICF', extension: 'PDF', uploadDate: addDays(TODAY, -329), url: '#', size: '1.2 MB', critical: true },
+      { id: 'd2', name: 'Screening Spirometry', category: 'LAB', extension: 'PDF', uploadDate: addDays(TODAY, -329), url: '#', size: '450 KB' },
+    ]
   },
   {
     id: 'ALTESA-001', name: 'James Wilson', phase: 'SCREENING', phaseCode: 'scr',
@@ -134,6 +151,9 @@ export const PATIENTS: Patient[] = [
     },
     ers: [], psb: null, psbRecords: 0,
     nextVisit: addDays(TODAY, 7), nextVisitLabel: 'PSB Start — Week 1 Day 1 (Home)',
+    documents: [
+      { id: 'd3', name: 'Informed Consent v2.0', category: 'ICF', extension: 'PDF', uploadDate: TODAY, url: '#', size: '1.2 MB', critical: true },
+    ]
   },
   {
     id: 'ALTESA-012', name: 'Maria Garcia', phase: 'PSB', phaseCode: 'psb',
@@ -159,6 +179,9 @@ export const PATIENTS: Patient[] = [
     ers: [5, 4, 6, 5, 4, 5, 6, 5, 4, 3, 5, 4, 5, 6, 5, 4, 5, 6, 5, 4, 5, 4, 5, 6, 5, 4, 5, 6, 5, 5],
     psb: 4.9, psbRecords: 30,
     nextVisit: addDays(TODAY, 2), nextVisitLabel: 'Monthly call ±5d (Day 56-58)',
+    documents: [
+      { id: 'd4', name: 'Informed Consent v1.0', category: 'ICF', extension: 'PDF', uploadDate: addDays(TODAY, -70), url: '#', size: '1.1 MB', critical: true },
+    ]
   },
   {
     id: 'ALTESA-023', name: 'Robert Chen', phase: 'PSB', phaseCode: 'psb',
@@ -177,6 +200,7 @@ export const PATIENTS: Patient[] = [
     ers: [6, 5, 7, 6, 5, 6, 7, 5, 4, 6, 7, 6, 5, 6, 7, 8, 6, 5, 6, 7, 6, 5, 4, 6, 7, 6, 5, 6, 7, 6],
     psb: 5.8, psbRecords: 156,
     nextVisit: addDays(TODAY, 112), nextVisitLabel: 'Rescreening Clinic (Week 48)',
+    documents: []
   },
   {
     id: 'ALTESA-031', name: 'Sarah Miller', phase: 'TREATMENT', phaseCode: 'tx',
@@ -209,6 +233,10 @@ export const PATIENTS: Patient[] = [
     ers: [8, 7, 9, 10, 11, 12, 11, 10, 9, 8, 9, 10, 11, 12, 11, 10, 9, 10, 11, 12, 11, 10, 9, 8, 9, 10, 11, 12, 11, 13],
     psb: 8.3, psbRecords: 89,
     nextVisit: addDays(TODAY, 4), nextVisitLabel: 'Treatment Day 7 (±1) — Clinic',
+    documents: [
+      { id: 'd5', name: 'Informed Consent v2.0', category: 'ICF', extension: 'PDF', uploadDate: addDays(TODAY, -137), url: '#', size: '1.2 MB', critical: true },
+      { id: 'd6', name: 'Day 1 ECG', category: 'ECG', extension: 'PDF', uploadDate: addDays(TODAY, -3), url: '#', size: '890 KB' },
+    ]
   },
   {
     id: 'ALTESA-039', name: 'Antonio Lopez', phase: 'TREATMENT', phaseCode: 'tx',
@@ -240,6 +268,9 @@ export const PATIENTS: Patient[] = [
     psb: 9.1, psbRecords: 102,
     nextVisit: addDays(TODAY, 14), nextVisitLabel: 'Treatment Day 28 (±3) — Clinic',
     labNote: 'No Central Safety Labs at Day 14 (SoA Table 1). Labs scheduled at: Scr, Re-Scr, D1-PreDose, D3, D7, D28-FUP.',
+    documents: [
+      { id: 'd7', name: 'Informed Consent v2.0', category: 'ICF', extension: 'PDF', uploadDate: addDays(TODAY, -148), url: '#', size: '1.2 MB', critical: true },
+    ]
   },
   {
     id: 'ALTESA-058', name: 'Linda Thompson', phase: 'PSB', phaseCode: 'psb',
@@ -262,6 +293,9 @@ export const PATIENTS: Patient[] = [
     ers: [4, 3, 5, 4, 3, 4, 5, 4, 3, 4, 5, 4, 3, 4, 5, 3, 4, 5, 4, 3, 4, 5, 4, 3, 4, 5, 4, 3, 4, 4],
     psb: 3.8, psbRecords: 315,
     nextVisit: addDays(TODAY, 21), nextVisitLabel: 'Rescreening Clinic (Week 68)',
+    documents: [
+      { id: 'd8', name: 'Informed Consent v1.0', category: 'ICF', extension: 'PDF', uploadDate: addDays(TODAY, -469), url: '#', size: '1.1 MB', critical: true },
+    ]
   },
   {
     id: 'ALTESA-067', name: 'Michael Brown', phase: 'FOLLOWUP', phaseCode: 'fu',
@@ -295,6 +329,9 @@ export const PATIENTS: Patient[] = [
     ers: [9, 8, 10, 11, 12, 13, 12, 11, 10, 9, 10, 9, 8, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7],
     psb: 9.1, psbRecords: 102,
     nextVisit: addDays(TODAY, 14), nextVisitLabel: 'Day 42 / EOS (±3) — Clinic',
+    documents: [
+      { id: 'd9', name: 'Informed Consent v2.0', category: 'ICF', extension: 'PDF', uploadDate: addDays(TODAY, -202), url: '#', size: '1.2 MB', critical: true },
+    ]
   },
 ];
 
@@ -307,3 +344,23 @@ export const WZ_STEPS = [
   { title: 'Sample Collection — Pre-Dose', body: 'Collect all biological samples <strong>before</strong> first dose. Central Virology: <strong>mid-turbinate nasal swab each nostril</strong> (fn. g). PK is pre-dose.', checks: ['Central Virology Collection — nasal swab each nostril ✓', 'Baseline susceptibility and genotyping samples labelled and shipped', 'Sparse PK Sampling — Day 1 Pre-Dose (fn. j)', 'Central Safety Labs: Chemistry / Haematology / Urinalysis', 'Pregnancy Test — URINE sample (WOCBP only, fn. a)', 'Concomitant Medications reviewed by qualified investigator (fn. l)'] },
   { title: 'Randomise & Administer First Dose', body: 'All assessments complete. Randomise and administer first dose. Document the <strong>exact time of dosing</strong>. Activate daily ePRO monitoring.', checks: ['Randomisation completed in IWRS — number assigned', 'Study drug administered — date, time, lot number in eCRF', 'Participant instructed on at-home daily dosing (D2–D6)', 'ePRO activated: E-RS/PGIS and WURSS-11 daily from today', 'Day 3 clinic visit (±1 day) scheduled', 'Adverse Events collection active (fn. k)'] },
 ];
+
+export const GLOSSARY = [
+  { term: 'PSB', def: 'Pre-Symptomatic Baseline. The phase where patients report daily symptoms before infection.' },
+  { term: 'DTQ', def: 'Daily Trigger Questionnaire. Asks if the patient has new respiratory symptoms.' },
+  { term: 'RV', def: 'Rhinovirus. The protocol triggered after a positive DTQ.' },
+  { term: 'E-RS', def: 'Evaluating Respiratory Symptoms scales.' },
+  { term: 'ePRO', def: 'Electronic Patient-Reported Outcomes.' },
+  { term: 'WURSS', def: 'Wisconsin Upper Respiratory Symptom Survey.' },
+  { term: 'SABD', def: 'Short-Acting Bronchodilator.' },
+  { term: 'WOCBP', def: 'Women of Childbearing Potential.' },
+  { term: 'SoA', def: 'Schedule of Assessments. The protocol-defined timing for all study procedures.' }
+];
+
+export function countTasks(p: Patient) {
+  const all = Object.values(p.tasks).flat();
+  return {
+    done: all.filter(t => t.done).length,
+    total: all.length
+  };
+}

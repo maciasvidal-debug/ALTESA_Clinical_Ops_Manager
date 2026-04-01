@@ -1,151 +1,46 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { PATIENTS, WZ_STEPS, fmtHuman, fmtISO, getTodayPct, TODAY, diffDays, addDays, type Patient, type Notification } from '@/lib/data';
 import { 
-  Bell, Home, ClipboardList, Wind, Pill, FileText, CheckCircle2, 
-  GraduationCap, Phone, Hospital, AlertTriangle, Bug, Droplet, 
-  Stethoscope, Activity, FileWarning, Search, Lock, ChevronRight, 
-  ArrowLeft, X, Microscope, Check, Circle, ArrowRight, BarChart2,
-  Calendar, Flag, Delete, User, ArrowUpDown, UserPlus, FileEdit,
-  Info, Globe, Clock, Mail, ChevronDown, Plus, ArrowUp, ArrowDown, Link, HelpCircle
+  PATIENTS, fmtHuman, fmtISO, getTodayPct, TODAY, diffDays, addDays, 
+  GLOSSARY, WZ_STEPS,
+  type Patient, type Notification, type Document, type Task
+} from '@/lib/data';
+import { 
+  Bell, ClipboardList, AlertTriangle, Search, Lock, UserPlus, 
+  Check, ArrowRight, Delete, X, Info, User, Globe, Mail, Hospital, Clock,
+  HelpCircle, Phone, Activity, ChevronRight, ArrowUp, ArrowDown, Link,
+  ChevronDown, Plus, FileEdit, ArrowLeft, Circle, FileText, BarChart2,
+  CheckCircle2, Calendar, Flag, Microscope, Home, Wind, Pill
 } from 'lucide-react';
 
+// Components
+import { Auth } from '@/components/Auth';
+import { Dashboard } from '@/components/Dashboard';
+import { PatientDetail } from '@/components/PatientDetail';
+import { DependencyLines } from '@/components/DependencyLines';
+import { PatientDocuments } from '@/components/PatientDocuments';
+import { CmdPalette } from '@/components/CmdPalette';
+import { HelpModal } from '@/components/HelpModal';
+import { DailyBriefing } from '@/components/DailyBriefing';
+import { Sparkline } from '@/components/Sparkline';
+import { AddPatientModal } from '@/components/AddPatientModal';
+import { EditPatientModal } from '@/components/EditPatientModal';
+import { NotificationCenter } from '@/components/NotificationCenter';
+import { Toasts } from '@/components/Toasts';
+import { Wizard } from '@/components/Wizard';
+import { RescreeningWizard } from '@/components/RescreeningWizard';
+
 const IconMap: Record<string, any> = {
-  '🔔': Bell, '🏠': Home, '📋': ClipboardList, '💨': Wind, '💊': Pill,
-  '🫁': Activity, '🫀': Activity, '🩺': Stethoscope, '🧪': Droplet,
-  '📄': FileText, '✅': CheckCircle2, '🎓': GraduationCap, '📞': Phone,
-  '🏥': Hospital, '⚠️': AlertTriangle, '🦠': Bug, '🩸': Droplet,
-  '📝': FileEdit,
-  'Bell': Bell, 'Home': Home, 'ClipboardList': ClipboardList, 'Wind': Wind, 'Pill': Pill
+  Bell, ClipboardList, AlertTriangle, Search, Lock, UserPlus, 
+  Check, ArrowRight, Delete, X, Info, User, Globe, Mail, Hospital, Clock,
+  Home, Wind, Pill, Activity, Phone, Calendar, Flag, Microscope, FileText,
+  CheckCircle2, Circle, Plus, FileEdit, ArrowLeft, ArrowUp, ArrowDown, Link,
+  ChevronDown, ChevronRight, '📋': ClipboardList, '📝': FileText, '🫁': Activity,
+  '🫀': Activity, '🩺': Activity, '🧪': Microscope, '📄': FileText, '✅': CheckCircle2,
+  '💊': Pill, '🎓': Info, '🔔': Bell, '💨': Wind, '📞': Phone, '🏥': Hospital,
+  '🦠': Activity, '🩸': Activity, '⚠️': AlertTriangle
 };
-
-const DependencyLines = ({ activeTrace, p, taskListRef }: { activeTrace: string | null, p: any, taskListRef: React.RefObject<HTMLDivElement | null> }) => {
-  const [lines, setLines] = useState<{ x1: number, y1: number, x2: number, y2: number, color: string }[]>([]);
-
-  useEffect(() => {
-    const updateLines = () => {
-      if (!activeTrace || !taskListRef.current) {
-        setLines([]);
-        return;
-      }
-      const containerRect = taskListRef.current.getBoundingClientRect();
-      const activeEl = taskListRef.current.querySelector(`[data-code="${activeTrace}"]`);
-      if (!activeEl) {
-        setLines([]);
-        return;
-      }
-
-      const activeRect = activeEl.getBoundingClientRect();
-      const activeY = activeRect.top - containerRect.top + activeRect.height / 2;
-      const activeX = 6; // Just inside the card edge
-
-      const allTasks = Object.values(p.tasks).flat() as any[];
-      const activeTask = allTasks.find(t => t.code === activeTrace);
-      
-      const newLines: any[] = [];
-
-      // Prereqs
-      activeTask?.dependsOn?.forEach((code: string) => {
-        const el = taskListRef.current?.querySelector(`[data-code="${code}"]`);
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          const y = rect.top - containerRect.top + rect.height / 2;
-          newLines.push({ x1: activeX, y1: y, x2: activeX, y2: activeY, color: 'var(--amber)' });
-        }
-      });
-
-      // Dependents
-      allTasks.filter(t => t.dependsOn?.includes(activeTrace)).forEach(t => {
-        const el = taskListRef.current?.querySelector(`[data-code="${t.code}"]`);
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          const y = rect.top - containerRect.top + rect.height / 2;
-          newLines.push({ x1: activeX, y1: activeY, x2: activeX, y2: y, color: 'var(--blue)' });
-        }
-      });
-
-      setLines(newLines);
-    };
-
-    const raf = requestAnimationFrame(updateLines);
-    const timer = setInterval(updateLines, 100); // Faster updates for smooth feel
-    window.addEventListener('resize', updateLines);
-    return () => {
-      cancelAnimationFrame(raf);
-      clearInterval(timer);
-      window.removeEventListener('resize', updateLines);
-    };
-  }, [activeTrace, p, taskListRef]);
-
-  if (!activeTrace || lines.length === 0) return null;
-
-  return (
-    <svg 
-      style={{ 
-        position: 'absolute', 
-        top: 0, 
-        left: 0, 
-        width: '100%', 
-        height: '100%', 
-        pointerEvents: 'none', 
-        zIndex: 5,
-        overflow: 'visible'
-      }}
-    >
-      <defs>
-        <marker id="arrowhead-amber" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
-          <polygon points="0 0, 10 3.5, 0 7" fill="var(--amber)" />
-        </marker>
-        <marker id="arrowhead-blue" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
-          <polygon points="0 0, 10 3.5, 0 7" fill="var(--blue)" />
-        </marker>
-      </defs>
-      {lines.map((l, i) => {
-        const isUp = l.y2 < l.y1;
-        const offset = 12; // Adjusted for better alignment
-        const radius = 6;
-        const dist = Math.abs(l.y2 - l.y1);
-        const actualRadius = Math.min(radius, dist / 2);
-        
-        // Path with rounded corners
-        const d = dist < 5 
-          ? `M ${l.x1} ${l.y1} L ${l.x2} ${l.y2}`
-          : `M ${l.x1} ${l.y1} 
-             L ${l.x1 - offset + actualRadius} ${l.y1} 
-             Q ${l.x1 - offset} ${l.y1} ${l.x1 - offset} ${l.y1 + (isUp ? -actualRadius : actualRadius)} 
-             L ${l.x1 - offset} ${l.y2 + (isUp ? actualRadius : -actualRadius)} 
-             Q ${l.x1 - offset} ${l.y2} ${l.x1 - offset + actualRadius} ${l.y2} 
-             L ${l.x2} ${l.y2}`;
-
-        return (
-          <g key={i}>
-            <path 
-              d={d}
-              fill="none"
-              stroke={l.color}
-              strokeWidth="2"
-              strokeDasharray="4 3"
-              markerEnd={`url(#arrowhead-${l.color === 'var(--amber)' ? 'amber' : 'blue'})`}
-              style={{ transition: 'all 0.3s ease-in-out', opacity: 0.8 }}
-            />
-          </g>
-        );
-      })}
-    </svg>
-  );
-};
-
-const GLOSSARY = [
-  { term: 'PSB', def: 'Pre-Symptomatic Baseline. The phase where patients report daily symptoms before infection.' },
-  { term: 'DTQ', def: 'Daily Trigger Questionnaire. Asks if the patient has new respiratory symptoms.' },
-  { term: 'RV', def: 'Rhinovirus. The protocol triggered after a positive DTQ.' },
-  { term: 'E-RS', def: 'Evaluating Respiratory Symptoms scales.' },
-  { term: 'ePRO', def: 'Electronic Patient-Reported Outcomes.' },
-  { term: 'WURSS', def: 'Wisconsin Upper Respiratory Symptom Survey.' },
-  { term: 'SABD', def: 'Short-Acting Bronchodilator.' },
-  { term: 'WOCBP', def: 'Women of Childbearing Potential.' }
-];
 
 export default function App() {
   const [patients, setPatients] = useState<Patient[]>(() => 
@@ -172,6 +67,7 @@ export default function App() {
   const [rescreeningChks, setRescreeningChks] = useState<Record<number, Set<number>>>({});
   
   const [dashFilter, setDashFilter] = useState<'all' | 'crit' | 'warn' | 'routine'>('all');
+  const [activeTab, setActiveTab] = useState<'checklist' | 'documents'>('checklist');
   
   const [chkd, setChkd] = useState<Record<string, Set<string>>>({});
   
@@ -519,6 +415,7 @@ export default function App() {
       psbRecords: 0,
       nextVisit: addDays(TODAY, 7),
       nextVisitLabel: 'PSB Start — Week 1 Day 1 (Home)',
+      documents: [],
     };
     
     setPatients(prev => [...prev, newPatient]);
@@ -1393,24 +1290,52 @@ export default function App() {
           </div>
         </div>
         <div className="today-context-bar" style={{ background: `linear-gradient(90deg, ${phaseColor} 0%, transparent 100%)` }}></div>
+        <div className="pv-tabs" style={{ display: 'flex', gap: '2px', padding: '0 24px', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
+          <button 
+            className={`pv-tab ${activeTab === 'checklist' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('checklist')}
+            style={{ padding: '12px 20px', fontSize: '13px', fontWeight: 600, borderBottom: activeTab === 'checklist' ? '2px solid var(--blue)' : '2px solid transparent', color: activeTab === 'checklist' ? 'var(--blue)' : 'var(--t3)', transition: 'all 0.2s' }}
+          >
+            <ClipboardList size={14} style={{display:'inline', marginRight:'8px', verticalAlign:'text-bottom'}}/>
+            Today&apos;s Checklist
+          </button>
+          <button 
+            className={`pv-tab ${activeTab === 'documents' ? 'active' : ''}`} 
+            onClick={() => setActiveTab('documents')}
+            style={{ padding: '12px 20px', fontSize: '13px', fontWeight: 600, borderBottom: activeTab === 'documents' ? '2px solid var(--blue)' : '2px solid transparent', color: activeTab === 'documents' ? 'var(--blue)' : 'var(--t3)', transition: 'all 0.2s' }}
+          >
+            <FileText size={14} style={{display:'inline', marginRight:'8px', verticalAlign:'text-bottom'}}/>
+            Documentation
+            {p.documents.length === 0 && <span style={{ marginLeft: '8px', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--red)', display: 'inline-block' }}></span>}
+          </button>
+        </div>
         <div className="pv-grid">
           <div>
-            {p.dtqPos && (
+            {p.dtqPos && activeTab === 'checklist' && (
               <button className="dtq-btn" onClick={() => { setCdStart(Date.now() - 3 * 3600000); setWzOpen(true); }}>
                 <AlertTriangle size={18} /><span>Open RV Protocol Wizard — Countdown Active</span>
               </button>
             )}
-            <div className="card" ref={taskListRef} style={{ position: 'relative' }}>
-              <DependencyLines activeTrace={tracedTask || hoveredTask} p={p} taskListRef={taskListRef} />
-              <div className="card-hdr">
-                <div><div className="card-title">Today&apos;s Assessment Checklist</div><div className="card-sub">{p.phaseLabel} · {p.loc} · {fmtISO(TODAY)}</div></div>
-                <div className={`progress-pill ${pct === 100 ? 'done' : ''}`}>{done}/{total}</div>
+            {activeTab === 'checklist' ? (
+              <div className="card" ref={taskListRef} style={{ position: 'relative' }}>
+                <DependencyLines activeTrace={tracedTask || hoveredTask} p={p} taskListRef={taskListRef} />
+                <div className="card-hdr">
+                  <div><div className="card-title">Today&apos;s Assessment Checklist</div><div className="card-sub">{p.phaseLabel} · {p.loc} · {fmtISO(TODAY)}</div></div>
+                  <div className={`progress-pill ${pct === 100 ? 'done' : ''}`}>{done}/{total}</div>
+                </div>
+                {renderGroup('Questionnaires / ePRO', p.tasks.q)}
+                {renderGroup('Procedures', p.tasks.pr)}
+                {renderGroup('Laboratory', p.tasks.l)}
+                {renderGroup('Administrative', p.tasks.ad)}
               </div>
-              {renderGroup('Questionnaires / ePRO', p.tasks.q)}
-              {renderGroup('Procedures', p.tasks.pr)}
-              {renderGroup('Laboratory', p.tasks.l)}
-              {renderGroup('Administrative', p.tasks.ad)}
-            </div>
+            ) : (
+              <PatientDocuments 
+                patient={p} 
+                onUpdate={(docs) => {
+                  setPatients(prev => prev.map(pt => pt.id === p.id ? { ...pt, documents: docs } : pt));
+                }} 
+              />
+            )}
           </div>
           <div className="rpanel">
             {p.ers && p.ers.length > 0 && (
@@ -1843,556 +1768,6 @@ export default function App() {
   );
 }
 
-function DailyBriefing({ patients, onClose, onSelectPatient }: { patients: Patient[], onClose: () => void, onSelectPatient: (id: string) => void }) {
-  const crits = patients.filter(p => p.alert === 'DTQ_POSITIVE');
-  const overdueTasks: any[] = [];
-  const clinicToday = patients.filter(p => p.loc.includes('CLINIC'));
-  
-  patients.forEach(p => {
-    const allTasks = [...(p.tasks.q || []), ...(p.tasks.pr || []), ...(p.tasks.l || []), ...(p.tasks.ad || [])];
-    allTasks.forEach(t => {
-      if (!t.done && t.dueDate) {
-        const diff = diffDays(TODAY, t.dueDate);
-        if (diff < 0) {
-          overdueTasks.push({ pid: p.id, task: t, diff: Math.abs(diff) });
-        }
-      }
-    });
-  });
 
-  return (
-    <div className="briefing-overlay">
-      <div className="briefing-card">
-        <div className="briefing-hdr">
-          <div className="briefing-title">Good morning, Coordinator</div>
-          <div className="briefing-sub">
-            <Calendar size={14} /> {fmtHuman(TODAY)}, {fmtISO(TODAY)}
-            <span style={{ margin: '0 8px', opacity: 0.3 }}>|</span>
-            <Clock size={14} /> Shift Summary
-          </div>
-        </div>
-        <div className="briefing-body">
-          <div className="brief-sec">
-            <div className="brief-sec-title"><AlertTriangle size={14} /> Critical Actions Required</div>
-            {crits.length > 0 ? crits.map(p => (
-              <div key={p.id} className="brief-item crit" onClick={() => onSelectPatient(p.id)}>
-                <div className="brief-icon"><AlertTriangle size={20} /></div>
-                <div className="brief-content">
-                  <div className="brief-pt-id">{p.id} — {p.name}</div>
-                  <div className="brief-msg">RV Protocol Active: Randomisation window is running</div>
-                  <div className="brief-meta">Symptom onset reported. Action required within 48h+6h window.</div>
-                </div>
-                <ChevronRight size={16} color="var(--t4)" />
-              </div>
-            )) : (
-              <div style={{ padding: '16px', background: 'var(--green-bg)', color: 'var(--green)', borderRadius: 'var(--r2)', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CheckCircle2 size={16} /> No patients currently in the critical RV window.
-              </div>
-            )}
-          </div>
 
-          <div className="briefing-grid">
-            <div className="brief-sec">
-              <div className="brief-sec-title"><Hospital size={14} /> Clinic Visits Today</div>
-              {clinicToday.length > 0 ? clinicToday.map(p => (
-                <div key={p.id} className="brief-item today" onClick={() => onSelectPatient(p.id)}>
-                  <div className="brief-icon"><Hospital size={18} /></div>
-                  <div className="brief-content">
-                    <div className="brief-pt-id">{p.id}</div>
-                    <div className="brief-msg">{p.phaseLabel.split('·')[0]} Visit</div>
-                    <div className="brief-meta">Scheduled for today in clinic.</div>
-                  </div>
-                </div>
-              )) : (
-                <div style={{ fontSize: '13px', color: 'var(--t3)', padding: '8px 0' }}>No clinic visits scheduled for today.</div>
-              )}
-            </div>
 
-            <div className="brief-sec">
-              <div className="brief-sec-title"><Clock size={14} /> Overdue Tasks</div>
-              {overdueTasks.length > 0 ? overdueTasks.slice(0, 4).map((item, i) => (
-                <div key={i} className="brief-item warn" onClick={() => onSelectPatient(item.pid)}>
-                  <div className="brief-icon"><Clock size={18} /></div>
-                  <div className="brief-content">
-                    <div className="brief-pt-id">{item.pid}</div>
-                    <div className="brief-msg">{item.task.label}</div>
-                    <div className="brief-meta">Overdue by {item.diff} day{item.diff !== 1 ? 's' : ''}.</div>
-                  </div>
-                </div>
-              )) : (
-                <div style={{ fontSize: '13px', color: 'var(--green)', padding: '8px 0' }}>All tasks are up to date.</div>
-              )}
-              {overdueTasks.length > 4 && (
-                <div style={{ fontSize: '11px', color: 'var(--t3)', textAlign: 'center', marginTop: '8px' }}>
-                  + {overdueTasks.length - 4} more overdue tasks
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="brief-footer">
-          <button className="btn btn-primary" style={{ padding: '12px 32px' }} onClick={onClose}>Start My Shift</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HelpModal({ onClose, initialTab = 'guide' }: { onClose: () => void, initialTab?: string }) {
-  const [tab, setTab] = useState(initialTab);
-  return (
-    <div className="modal-overlay" style={{ zIndex: 900 }}>
-      <div className="modal-card" style={{ maxWidth: '600px', padding: 0 }}>
-        <div className="modal-hdr" style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)' }}>
-          <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <HelpCircle size={18} color="var(--blue)" /> 
-            Help &amp; Learning Centre
-          </div>
-          <button className="ibtn" onClick={onClose}><X size={16} /></button>
-        </div>
-        <div className="modal-body" style={{ padding: 0 }}>
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg)', padding: '0 16px' }}>
-            <button className={`tab-btn ${tab === 'guide' ? 'active' : ''}`} onClick={() => setTab('guide')} style={{ padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `2px solid ${tab === 'guide' ? 'var(--blue)' : 'transparent'}`, fontSize: '13px', fontWeight: 600, color: tab === 'guide' ? 'var(--blue)' : 'var(--t2)', cursor: 'pointer' }}>Quick Guide</button>
-            <button className={`tab-btn ${tab === 'glossary' ? 'active' : ''}`} onClick={() => setTab('glossary')} style={{ padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `2px solid ${tab === 'glossary' ? 'var(--blue)' : 'transparent'}`, fontSize: '13px', fontWeight: 600, color: tab === 'glossary' ? 'var(--blue)' : 'var(--t2)', cursor: 'pointer' }}>Glossary</button>
-            <button className={`tab-btn ${tab === 'shortcuts' ? 'active' : ''}`} onClick={() => setTab('shortcuts')} style={{ padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `2px solid ${tab === 'shortcuts' ? 'var(--blue)' : 'transparent'}`, fontSize: '13px', fontWeight: 600, color: tab === 'shortcuts' ? 'var(--blue)' : 'var(--t2)', cursor: 'pointer' }}>Shortcuts</button>
-          </div>
-          <div style={{ padding: '24px', maxHeight: '60vh', overflowY: 'auto', fontSize: '13px', lineHeight: '1.6', color: 'var(--t2)' }}>
-            {tab === 'guide' && (
-              <div>
-                <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '16px', color: 'var(--t1)' }}>Welcome to the ALTESA Coordination Platform!</h3>
-                <p style={{ marginBottom: '16px' }}>This platform is designed to help you manage patients through the different phases of the VPV study. Here is a summary of how to use the main features:</p>
-                
-                <div style={{ marginBottom: '24px' }}>
-                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--t1)', display: 'flex', alignItems: 'center', gap: '6px' }}><Home size={14} /> 1. Dashboard</h4>
-                  <p style={{ margin: 0 }}>The main dashboard shows all your active patients. Pay special attention to the <strong>Alerts</strong> at the top. Patients with a <strong>Positive DTQ</strong> alert require immediate action (within the next 48 hours).</p>
-                </div>
-
-                <div style={{ marginBottom: '24px' }}>
-                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--t1)', display: 'flex', alignItems: 'center', gap: '6px' }}><User size={14} /> 2. Patient View and Tasks</h4>
-                  <p style={{ marginBottom: '8px' }}>By clicking on a patient, you will see their detailed timeline and task list. Tasks are grouped by category (Questionnaires, Procedures, Laboratories, Administrative).</p>
-                  <ul style={{ paddingLeft: '20px', margin: 0 }}>
-                    <li style={{ marginBottom: '6px' }}><strong>Complete Tasks:</strong> Click the circle next to a task to mark it as completed.</li>
-                    <li style={{ marginBottom: '6px' }}><strong>Dependencies:</strong> Some tasks depend on others. Look for the <span style={{ background: 'var(--amber-bg)', color: 'var(--amber)', padding: '2px 4px', borderRadius: '4px', fontSize: '10px' }}>PREREQUISITE</span> and <span style={{ background: 'var(--blue-bg)', color: 'var(--blue)', padding: '2px 4px', borderRadius: '4px', fontSize: '10px' }}>DEPENDENT</span> tags. Click &quot;Trace Flow&quot; to see visual lines connecting the tasks.</li>
-                    <li style={{ marginBottom: '6px' }}><strong>Due Dates:</strong> Tasks with a red dot are overdue or due today.</li>
-                  </ul>
-                </div>
-
-                <div style={{ marginBottom: '24px' }}>
-                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--t1)', display: 'flex', alignItems: 'center', gap: '6px' }}><AlertTriangle size={14} /> 3. The RV Protocol (Positive DTQ)</h4>
-                  <p style={{ margin: 0 }}>If a patient reports new symptoms (DTQ task), the system will ask if the result is Positive or Negative. A <strong>Positive</strong> result triggers the RV Protocol Wizard, which will guide you through the critical steps before randomisation.</p>
-                </div>
-              </div>
-            )}
-            {tab === 'glossary' && (
-              <div>
-                <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '16px', color: 'var(--t1)' }}>Study Terms Glossary</h3>
-                <div style={{ display: 'grid', gap: '16px' }}>
-                  <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--t1)', marginBottom: '4px' }}>PSB (Pre-Symptomatic Baseline)</div>
-                    <div>The phase where patients report daily symptoms via ePRO. We need at least 3 records to establish a baseline before any infection.</div>
-                  </div>
-                  <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--t1)', marginBottom: '4px' }}>DTQ (Daily Trigger Questionnaire)</div>
-                    <div>A daily questionnaire asking if the patient has new respiratory symptoms. A positive response triggers the RV Protocol.</div>
-                  </div>
-                  <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--t1)', marginBottom: '4px' }}>RV Protocol (Rhinovirus)</div>
-                    <div>The time-critical phase (48h + 6h window) starting from symptom onset, leading to randomisation and treatment.</div>
-                  </div>
-                  <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--t1)', marginBottom: '4px' }}>E-RS / PGIS</div>
-                    <div>Evaluating Respiratory Symptoms scales. Used to calculate the PSB and track symptom resolution during treatment.</div>
-                  </div>
-                </div>
-              </div>
-            )}
-            {tab === 'shortcuts' && (
-              <div>
-                <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '16px', color: 'var(--t1)' }}>Keyboard Shortcuts</h3>
-                <div style={{ display: 'grid', gap: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '12px' }}>
-                    <kbd style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'var(--fm)', fontSize: '11px', color: 'var(--t1)', boxShadow: '0 1px 1px rgba(0,0,0,0.05)' }}>⌘ + K</kbd>
-                    <span>Open Quick Search / Command Palette</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '12px' }}>
-                    <kbd style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'var(--fm)', fontSize: '11px', color: 'var(--t1)', boxShadow: '0 1px 1px rgba(0,0,0,0.05)' }}>Esc</kbd>
-                    <span>Close modals or search</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '12px' }}>
-                    <kbd style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'var(--fm)', fontSize: '11px', color: 'var(--t1)', boxShadow: '0 1px 1px rgba(0,0,0,0.05)' }}>Space</kbd> <span style={{ fontSize: '11px' }}>or</span> <kbd style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'var(--fm)', fontSize: '11px', color: 'var(--t1)', boxShadow: '0 1px 1px rgba(0,0,0,0.05)' }}>Enter</kbd>
-                    <span>Check/uncheck focused task</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="modal-footer" style={{ background: 'var(--bg)', borderTop: '1px solid var(--border)', padding: '16px 24px' }}>
-          <button className="btn btn-primary w-full" style={{ width: '100%', justifyContent: 'center' }} onClick={onClose}>Understood!</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Sparkline({ scores, psb, w = 264, h = 72 }: { scores: number[], psb: number | null, w?: number, h?: number }) {
-  if (!scores || !scores.length) return <p style={{ textAlign: 'center', color: 'var(--t3)', fontSize: '11px', padding: '16px 0' }}>No E-RS data</p>;
-  const n = Math.min(30, scores.length);
-  const pts = scores.slice(-n);
-  const mx = Math.max(...pts, psb || 0) + 2;
-  const mn = Math.max(0, Math.min(...pts, psb || 0) - 2);
-  const rng = mx - mn || 1;
-  const x = (i: number) => (i / (n - 1)) * w;
-  const y = (v: number) => h - ((v - mn) / rng) * h;
-  const line = pts.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-  const area = `${x(0).toFixed(1)},${h} ${line} ${x(n - 1).toFixed(1)},${h}`;
-  const py = psb ? y(psb) : null;
-  
-  return (
-    <svg className="ers-svg" viewBox={`0 0 ${w} ${h}`} style={{ height: `${h}px` }}>
-      <defs>
-        <linearGradient id="eg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--blue)" stopOpacity=".25"/>
-          <stop offset="100%" stopColor="var(--blue)" stopOpacity="0"/>
-        </linearGradient>
-      </defs>
-      {psb && py !== null && (
-        <>
-          <line x1="0" y1={py.toFixed(1)} x2={w} y2={py.toFixed(1)} stroke="var(--amber)" strokeWidth="1.5" strokeDasharray="4,3"/>
-          <text x={w - 2} y={(py - 4).toFixed(1)} textAnchor="end" fontSize="8" fill="var(--amber)" fontFamily="var(--fm)">PSB {psb}</text>
-        </>
-      )}
-      <polygon points={area} fill="url(#eg)"/>
-      <polyline points={line} fill="none" stroke="var(--blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx={x(n - 1).toFixed(1)} cy={y(pts[n - 1]).toFixed(1)} r="4" fill="var(--blue)"/>
-    </svg>
-  );
-}
-
-function Wizard({ step, setStep, chks, setChks, cdStart, onClose, onRandomise, onToggleChk }: any) {
-  const [cdStr, setCdStr] = useState('');
-  const [urgent, setUrgent] = useState(false);
-
-  useEffect(() => {
-    const tick = () => {
-      const rem = Math.max(0, (48 + 6) * 3600000 - (Date.now() - (cdStart || Date.now())));
-      const h = Math.floor(rem / 3600000);
-      const m = Math.floor((rem % 3600000) / 60000);
-      const s = Math.floor((rem % 60000) / 1000);
-      setCdStr(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
-      setUrgent(rem < 6 * 3600000);
-    };
-    tick();
-    const int = setInterval(tick, 1000);
-    return () => clearInterval(int);
-  }, [cdStart]);
-
-  const currentStep = WZ_STEPS[step];
-  const currentChks = chks[step] || new Set();
-  const allDone = currentStep.checks.every((_, i) => currentChks.has(i));
-  const isLast = step === WZ_STEPS.length - 1;
-  const missCount = currentStep.checks.filter((_, i) => !currentChks.has(i)).length;
-
-  const toggleChk = (i: number) => {
-    if (onToggleChk) {
-      onToggleChk(step, i);
-    } else {
-      setChks((prev: any) => {
-        const next = { ...prev };
-        if (!next[step]) next[step] = new Set();
-        const s = new Set(next[step]);
-        if (s.has(i)) s.delete(i); else s.add(i);
-        next[step] = s;
-        return next;
-      });
-    }
-  };
-
-  return (
-    <div className="wz-overlay" onClick={() => onClose(false)}>
-      <div className="wz-card" onClick={e => e.stopPropagation()}>
-        <div className="wz-top">
-          <div>
-            <div className="wz-heading">RV Protocol — ALTESA-047</div>
-            <div className="wz-heading-sub">Step {step + 1} of {WZ_STEPS.length} · {currentStep.title}</div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-            <div style={{ textAlign: 'right' }}>
-              <div className={`cd ${urgent ? 'urgent' : ''}`}>{cdStr}</div>
-              <div className="cd-lbl">Window remaining</div>
-            </div>
-            <button className="wz-close-btn" onClick={() => onClose(false)} title="Close (progress saved)"><X size={14} /></button>
-          </div>
-        </div>
-        <div className="wz-stepper">
-          {WZ_STEPS.map((_, i) => (
-            <div key={i} className={`step-dot ${i < step ? 'done' : i === step ? 'active' : ''}`}></div>
-          ))}
-        </div>
-        <div className="wz-body">
-          <div className="wz-step-n">Step {step + 1} of {WZ_STEPS.length}</div>
-          <div className="wz-step-title">{currentStep.title}</div>
-          <div className="wz-step-desc" dangerouslySetInnerHTML={{ __html: currentStep.body }}></div>
-          {currentStep.checks.map((c, i) => (
-            <div key={i} className={`wz-chk-item ${currentChks.has(i) ? 'checked' : ''}`}
-              tabIndex={0} role="checkbox" aria-checked={currentChks.has(i)}
-              onClick={() => toggleChk(i)}
-              onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleChk(i); } }}>
-              <div className={`chkbox ${currentChks.has(i) ? 'checked' : ''}`} style={{ flexShrink: 0 }}></div>
-              <span dangerouslySetInnerHTML={{ __html: c }}></span>
-            </div>
-          ))}
-        </div>
-        <div className="wz-foot">
-          <button className="btn btn-ghost" onClick={() => step === 0 ? onClose(false) : setStep(step - 1)}>
-            {step === 0 ? <><X size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Close</> : <><ArrowLeft size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Back</>}
-          </button>
-          <div className={`wz-missing-badge ${allDone ? 'none' : ''}`}>
-            {missCount > 0 ? `${missCount} item${missCount > 1 ? 's' : ''} to confirm` : ''}
-          </div>
-          <button className={`btn ${isLast ? 'btn-success' : 'btn-primary'}`} disabled={!allDone} onClick={() => isLast ? onRandomise() : setStep(step + 1)}>
-            {isLast ? <><Check size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Randomise</> : <>Next <ArrowRight size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/></>}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const RescreeningWizard = ({ 
-  patient, 
-  step, 
-  setStep, 
-  chks, 
-  onToggleChk, 
-  onClose, 
-  onComplete 
-}: { 
-  patient: any, 
-  step: number, 
-  setStep: (s: number) => void, 
-  chks: Record<number, Set<number>>, 
-  onToggleChk: (step: number, i: number) => void, 
-  onClose: () => void, 
-  onComplete: () => void 
-}) => {
-  const steps = [
-    { title: 'Patient Re-identification', icon: <User size={18} /> },
-    { title: 'Eligibility Re-evaluation', icon: <CheckCircle2 size={18} /> },
-    { title: 'Baseline Assessments', icon: <Microscope size={18} /> },
-    { title: 'Review & Schedule', icon: <Calendar size={18} /> }
-  ];
-
-  const eligibilityItems = [
-    'Confirm Informed Consent is still valid (or re-sign if updated)',
-    'Re-verify Inclusion Criteria (COPD diagnosis, age, etc.)',
-    'Re-verify Exclusion Criteria (no new comorbidities, no prohibited meds)',
-    'Update Medical & Smoking History (eCRF page updated)',
-    'Review Concomitant Medications with Investigator'
-  ];
-
-  const assessmentItems = [
-    'CAT — COPD Assessment Test performed',
-    'Oscillometry performed BEFORE spirometry',
-    'Spirometry (Pre & Post SABD) completed',
-    '12-lead ECG collected (prior to blood draw)',
-    'Vital Signs (seated ≥ 5 min) recorded',
-    'Central Safety Labs (Chemistry/Haematology) collected',
-    'Pregnancy Test (WOCBP only) performed'
-  ];
-
-  const renderStep = () => {
-    switch(step) {
-      case 1:
-        return (
-          <div className="wz-step-body">
-            <div className="wz-step-title">Patient Re-identification</div>
-            <div className="wz-step-desc">Confirm the identity of the patient being rescreened. Data is pre-populated from the study record.</div>
-            <div className="wz-form-grid">
-              <div className="wz-form-item"><label>Patient ID</label><input type="text" value={patient.id} disabled /></div>
-              <div className="wz-form-item"><label>Full Name</label><input type="text" value={patient.name} disabled /></div>
-              <div className="wz-form-item"><label>Current Phase</label><input type="text" value={patient.phaseLabel} disabled /></div>
-              <div className="wz-form-item"><label>Original Screening Date</label><input type="text" value={fmtISO(patient.screeningDate)} disabled /></div>
-            </div>
-          </div>
-        );
-      case 2:
-        return (
-          <div className="wz-step-body">
-            <div className="wz-step-title">Eligibility Re-evaluation</div>
-            <div className="wz-step-desc">In accordance with SoA Table 1, re-verify that the patient still meets all study criteria.</div>
-            <div className="wz-chk-list">
-              {eligibilityItems.map((item, i) => (
-                <div key={i} className={`wz-chk-item ${chks[2]?.has(i) ? 'on' : ''}`} onClick={() => onToggleChk(2, i)}>
-                  <div className="wz-chk-box">{chks[2]?.has(i) && <Check size={14} />}</div>
-                  <div className="wz-chk-text">{item}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      case 3:
-        return (
-          <div className="wz-step-body">
-            <div className="wz-step-title">Baseline Assessments</div>
-            <div className="wz-step-desc">Update baseline clinical data. These assessments are required every 6 months during the Asymptomatic Phase.</div>
-            <div className="wz-chk-list">
-              {assessmentItems.map((item, i) => (
-                <div key={i} className={`wz-chk-item ${chks[3]?.has(i) ? 'on' : ''}`} onClick={() => onToggleChk(3, i)}>
-                  <div className="wz-chk-box">{chks[3]?.has(i) && <Check size={14} />}</div>
-                  <div className="wz-chk-text">{item}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      case 4:
-        const allDone = (chks[2]?.size === eligibilityItems.length) && (chks[3]?.size === assessmentItems.length);
-        return (
-          <div className="wz-step-body">
-            <div className="wz-step-title">Review & Schedule</div>
-            <div className="wz-step-desc">Review all rescreening data and schedule the next monthly call.</div>
-            <div style={{ padding: '16px', background: 'var(--bg)', borderRadius: '8px', marginTop: '12px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px' }}>Rescreening Summary</div>
-              <div style={{ fontSize: '11px', color: 'var(--t2)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <div>Eligibility: <strong>{chks[2]?.size || 0}/{eligibilityItems.length}</strong></div>
-                <div>Assessments: <strong>{chks[3]?.size || 0}/{assessmentItems.length}</strong></div>
-                <div>Status: <span style={{ color: allDone ? 'var(--green)' : 'var(--amber)' }}>{allDone ? 'Ready to Complete' : 'Incomplete'}</span></div>
-              </div>
-            </div>
-            {!allDone && (
-              <div style={{ marginTop: '12px', padding: '10px', background: 'var(--amber-bg)', color: 'var(--amber)', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--amber-mid)' }}>
-                <AlertTriangle size={12} style={{ display: 'inline', marginRight: '6px' }} />
-                All eligibility and assessment items must be checked to complete rescreening.
-              </div>
-            )}
-          </div>
-        );
-      default: return null;
-    }
-  };
-
-  return (
-    <div className="wz-overlay" style={{ zIndex: 600 }}>
-      <div className="wz-card" style={{ maxWidth: '700px' }}>
-        <div className="wz-hdr">
-          <div className="wz-hdr-left">
-            <div className="wz-icon-circle" style={{ background: 'var(--amber-bg)', color: 'var(--amber)' }}><Flag size={20} /></div>
-            <div>
-              <div className="wz-title">Rescreening Workflow</div>
-              <div className="wz-sub">ALTESA Study · {patient.id} · Week {Math.floor(patient.studyDay / 7)}</div>
-            </div>
-          </div>
-          <button className="wz-close" onClick={onClose}><X size={20} /></button>
-        </div>
-        <div className="wz-stepper">
-          {steps.map((s, i) => (
-            <div key={i} className={`wz-step ${step === i + 1 ? 'active' : step > i + 1 ? 'done' : ''}`} onClick={() => setStep(i + 1)}>
-              <div className="wz-step-icon">{step > i + 1 ? <Check size={14} /> : s.icon}</div>
-              <div className="wz-step-label">{s.title}</div>
-              {i < steps.length - 1 && <div className="wz-step-line"></div>}
-            </div>
-          ))}
-        </div>
-        <div className="wz-content">{renderStep()}</div>
-        <div className="wz-footer">
-          <button className="btn btn-ghost" onClick={() => step > 1 ? setStep(step - 1) : onClose()}>
-            {step === 1 ? 'Cancel' : 'Previous'}
-          </button>
-          {step < 4 ? (
-            <button className="btn btn-primary" onClick={() => setStep(step + 1)}>Next Step</button>
-          ) : (
-            <button 
-              className="btn btn-success" 
-              disabled={!(chks[2]?.size === eligibilityItems.length && chks[3]?.size === assessmentItems.length)}
-              onClick={onComplete}
-            >
-              Complete Rescreening
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-function CmdPalette({ q, setQ, onClose, onSelect, patients, recentIds = [] }: any) {
-  const fuzzyMatch = (str: string, query: string) => {
-    if (!query) return true;
-    const s = str.toLowerCase();
-    const qry = query.toLowerCase();
-    let i = 0, j = 0;
-    while (i < s.length && j < qry.length) {
-      if (s[i] === qry[j]) j++;
-      i++;
-    }
-    return j === qry.length;
-  };
-
-  const all = patients.filter((p: Patient) => 
-    !q || 
-    fuzzyMatch(p.id, q) || 
-    fuzzyMatch(p.name, q) || 
-    fuzzyMatch(p.phaseLabel, q) || 
-    fuzzyMatch(p.loc, q)
-  );
-
-  const recents = patients.filter((p: Patient) => recentIds.includes(p.id))
-    .sort((a: Patient, b: Patient) => recentIds.indexOf(a.id) - recentIds.indexOf(b.id));
-
-  const crits = all.filter((p: Patient) => p.alert === 'DTQ_POSITIVE');
-  const warns = all.filter((p: Patient) => p.alert && p.alert !== 'DTQ_POSITIVE');
-  const routine = all.filter((p: Patient) => !p.alert);
-  const icons: any = { SCREENING: <ClipboardList size={14} />, PSB: <BarChart2 size={14} />, TREATMENT: <Pill size={14} />, FOLLOWUP: <Activity size={14} /> };
-
-  const renderSection = (title: string, pts: any[], icon?: any) => {
-    if (!pts.length) return null;
-    return (
-      <>
-        <div className="cmd-section-hdr">{icon && <span style={{marginRight:'6px'}}>{icon}</span>}{title}</div>
-        {pts.slice(0, 5).map(p => (
-          <div key={p.id} className="cmd-item" onClick={() => onSelect(p.id)}>
-            <div className="cmd-item-icon">{icons[p.phase] || <User size={14} />}{p.alert === 'DTQ_POSITIVE' ? <AlertTriangle size={14} style={{display:'inline', verticalAlign:'text-bottom', color:'var(--red)'}}/> : ''}</div>
-            <div>
-              <div className="cmd-item-main">{p.id} <span style={{color:'var(--t3)', fontWeight:400, fontSize:'11px', marginLeft:'4px'}}>{p.name}</span></div>
-              <div className="cmd-item-sub">{p.phaseLabel} · {p.loc}</div>
-            </div>
-          </div>
-        ))}
-      </>
-    );
-  };
-
-  return (
-    <div className="cmd-overlay" onClick={onClose}>
-      <div className="cmd-box" onClick={e => e.stopPropagation()}>
-        <div className="cmd-input-row">
-          <span className="cmd-icon"><Search size={16} /></span>
-          <input autoFocus className="cmd-input" placeholder="Search patient ID, name, phase…" value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') onClose(); }} />
-        </div>
-        <div className="cmd-results">
-          {!q && renderSection('Recently Accessed', recents, <Clock size={10} />)}
-          {renderSection('Critical', crits)}
-          {renderSection('Action Needed', warns)}
-          {renderSection('Routine', routine)}
-          <div className="cmd-section-hdr">Navigation</div>
-          <div className="cmd-item" onClick={() => onSelect('dashboard')}>
-            <div className="cmd-item-icon">🏠</div>
-            <div><div className="cmd-item-main">Dashboard</div><div className="cmd-item-sub">All patients — sorted by urgency</div></div>
-          </div>
-        </div>
-        <div className="cmd-footer"><ArrowUpDown size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> navigate · Enter to select · Esc to close</div>
-      </div>
-    </div>
-  );
-}
-
-function Toasts({ toasts }: { toasts: any[] }) {
-  return (
-    <div id="toasts">
-      {toasts.map(t => (
-        <div key={t.id} className={`toast ${t.type}`}>{t.msg}</div>
-      ))}
-    </div>
-  );
-}
