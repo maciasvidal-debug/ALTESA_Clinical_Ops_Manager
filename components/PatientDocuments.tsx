@@ -3,13 +3,15 @@
 import { useState, useRef } from 'react';
 import { Upload, FilePlus, AlertTriangle, FileText, FileCheck, Download, Trash2 } from 'lucide-react';
 import { TODAY, fmtHuman, type Patient } from '@/lib/data';
+import { DLPWrapper } from './DLPWrapper';
 
 interface PatientDocumentsProps {
   patient: Patient;
   onUpdate: (docs: any[]) => void;
+  onDLPViolation: (action: string) => void;
 }
 
-export const PatientDocuments = ({ patient, onUpdate }: PatientDocumentsProps) => {
+export const PatientDocuments = ({ patient, onUpdate, onDLPViolation }: PatientDocumentsProps) => {
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -109,7 +111,7 @@ export const PatientDocuments = ({ patient, onUpdate }: PatientDocumentsProps) =
             </div>
             <div className="doc-info">
               <div className="doc-name">
-                {doc.name}
+                <DLPWrapper onViolation={onDLPViolation}>{doc.name}</DLPWrapper>
                 {doc.critical && <span className="doc-crit-badge">CRITICAL</span>}
               </div>
               <div className="doc-meta">

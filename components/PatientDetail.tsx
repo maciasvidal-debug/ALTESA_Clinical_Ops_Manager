@@ -12,6 +12,7 @@ import {
 } from '@/lib/data';
 import { DependencyLines } from './DependencyLines';
 import { PatientDocuments } from './PatientDocuments';
+import { DLPWrapper } from '@/components/DLPWrapper';
 
 interface PatientDetailProps {
   patient: Patient;
@@ -22,11 +23,12 @@ interface PatientDetailProps {
   onUpdateDocs: (docs: Document[]) => void;
   onOpenWizard: () => void;
   isChecked: (code: string) => boolean;
+  onDLPViolation: (action: string) => void;
 }
 
 export const PatientDetail = ({ 
   patient, onBack, onEdit, onDelete, onToggleTask, 
-  onUpdateDocs, onOpenWizard, isChecked 
+  onUpdateDocs, onOpenWizard, isChecked, onDLPViolation 
 }: PatientDetailProps) => {
   const [activeTab, setActiveTab] = useState<'checklist' | 'documents'>('checklist');
   const [activeTrace, setActiveTrace] = useState<string | null>(null);
@@ -57,7 +59,7 @@ export const PatientDetail = ({
             {t.label}
             {isCrit && <span className="task-crit-badge">CRITICAL</span>}
           </div>
-          <div className="task-sub">{t.note}</div>
+          <div className="task-sub"><DLPWrapper onViolation={onDLPViolation}>{t.note}</DLPWrapper></div>
           {t.dependsOn && (
             <div className="task-deps">
               <span style={{ opacity: 0.6 }}>Requires:</span> {t.dependsOn.join(', ')}
@@ -77,10 +79,14 @@ export const PatientDetail = ({
           <div className="hdr-sep"></div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h1 className="pt-id-lg">{patient.id}</h1>
+              <h1 className="pt-id-lg">
+                <DLPWrapper onViolation={onDLPViolation}>{patient.id}</DLPWrapper>
+              </h1>
               <span className={`phase-badge ${phBadge}`}>{patient.phaseLabel}</span>
             </div>
-            <div className="pt-name-lg">{patient.name} · {patient.lang}</div>
+            <div className="pt-name-lg">
+              <DLPWrapper onViolation={onDLPViolation}>{patient.name}</DLPWrapper> · {patient.lang}
+            </div>
           </div>
         </div>
         <div className="hdr-right">
@@ -185,7 +191,7 @@ export const PatientDetail = ({
               </div>
             </div>
           ) : (
-            <PatientDocuments patient={patient} onUpdate={onUpdateDocs} />
+            <PatientDocuments patient={patient} onUpdate={onUpdateDocs} onDLPViolation={onDLPViolation} />
           )}
         </div>
 

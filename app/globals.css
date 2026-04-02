@@ -62,6 +62,19 @@ abbr[title] { text-decoration: underline dotted var(--border2); cursor: help; te
 .screen { animation: sIn 260ms var(--ease) both; }
 @keyframes sIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 
+/* ─── DLP ─── */
+.dlp-protected {
+  text-decoration: underline dotted var(--border2);
+  text-underline-offset: 3px;
+  cursor: help;
+  transition: all 0.2s ease;
+}
+.dlp-protected:hover {
+  text-decoration-color: var(--blue);
+  background-color: var(--blue-bg);
+  border-radius: 2px;
+}
+
 /* ─── TOASTS ─── */
 #toasts { position: fixed; bottom: 20px; right: 20px; z-index: 8000; display: flex; flex-direction: column; gap: 6px; }
 .toast { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); padding: 10px 14px; font-size: 12.5px; min-width: 200px; max-width: 300px; animation: tIn 200ms var(--ease); display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.08); }
@@ -69,6 +82,7 @@ abbr[title] { text-decoration: underline dotted var(--border2); cursor: help; te
 .toast.ok { border-left: 3px solid var(--green); }
 .toast.warn { border-left: 3px solid var(--amber); }
 .toast.err { border-left: 3px solid var(--red); }
+.toast.dlp-alert { border-left: 3px solid var(--blue); background-color: var(--blue-bg); }
 
 /* ─── AUTH ─── */
 .auth-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; background: linear-gradient(160deg, #F0F4FB 0%, #F4F5F7 100%); }

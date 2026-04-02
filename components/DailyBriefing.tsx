@@ -3,8 +3,9 @@
 import React from 'react';
 import { Calendar, Clock, AlertTriangle, ChevronRight, CheckCircle2, Hospital } from 'lucide-react';
 import { fmtHuman, fmtISO, TODAY, diffDays, type Patient } from '@/lib/data';
+import { DLPWrapper } from '@/components/DLPWrapper';
 
-export function DailyBriefing({ patients, onClose, onSelectPatient }: { patients: Patient[], onClose: () => void, onSelectPatient: (id: string) => void }) {
+export function DailyBriefing({ patients, onClose, onSelectPatient, onDLPViolation }: { patients: Patient[], onClose: () => void, onSelectPatient: (id: string) => void, onDLPViolation: (action: string) => void }) {
   const crits = patients.filter(p => p.alert === 'DTQ_POSITIVE');
   const overdueTasks: any[] = [];
   const clinicToday = patients.filter(p => p.loc.includes('CLINIC'));
@@ -39,7 +40,9 @@ export function DailyBriefing({ patients, onClose, onSelectPatient }: { patients
               <div key={p.id} className="brief-item crit" onClick={() => onSelectPatient(p.id)}>
                 <div className="brief-icon"><AlertTriangle size={20} /></div>
                 <div className="brief-content">
-                  <div className="brief-pt-id">{p.id} — {p.name}</div>
+                  <div className="brief-pt-id">
+                    <DLPWrapper onViolation={onDLPViolation}>{p.id}</DLPWrapper> — <DLPWrapper onViolation={onDLPViolation}>{p.name}</DLPWrapper>
+                  </div>
                   <div className="brief-msg">RV Protocol Active: Randomisation window is running</div>
                   <div className="brief-meta">Symptom onset reported. Action required within 48h+6h window.</div>
                 </div>
@@ -59,7 +62,9 @@ export function DailyBriefing({ patients, onClose, onSelectPatient }: { patients
                 <div key={p.id} className="brief-item today" onClick={() => onSelectPatient(p.id)}>
                   <div className="brief-icon"><Hospital size={18} /></div>
                   <div className="brief-content">
-                    <div className="brief-pt-id">{p.id}</div>
+                    <div className="brief-pt-id">
+                      <DLPWrapper onViolation={onDLPViolation}>{p.id}</DLPWrapper>
+                    </div>
                     <div className="brief-msg">{p.phaseLabel.split('·')[0]} Visit</div>
                     <div className="brief-meta">Scheduled for today in clinic.</div>
                   </div>
@@ -75,7 +80,9 @@ export function DailyBriefing({ patients, onClose, onSelectPatient }: { patients
                 <div key={i} className="brief-item warn" onClick={() => onSelectPatient(item.pid)}>
                   <div className="brief-icon"><Clock size={18} /></div>
                   <div className="brief-content">
-                    <div className="brief-pt-id">{item.pid}</div>
+                    <div className="brief-pt-id">
+                      <DLPWrapper onViolation={onDLPViolation}>{item.pid}</DLPWrapper>
+                    </div>
                     <div className="brief-msg">{item.task.label}</div>
                     <div className="brief-meta">Overdue by {item.diff} day{item.diff !== 1 ? 's' : ''}.</div>
                   </div>

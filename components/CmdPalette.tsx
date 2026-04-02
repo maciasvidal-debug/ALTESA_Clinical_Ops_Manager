@@ -3,8 +3,9 @@
 import React from 'react';
 import { Search, ClipboardList, BarChart2, Pill, Activity, User, AlertTriangle, Clock, ArrowUpDown } from 'lucide-react';
 import { Patient } from '@/lib/data';
+import { DLPWrapper } from '@/components/DLPWrapper';
 
-export function CmdPalette({ q, setQ, onClose, onSelect, patients, recentIds = [] }: any) {
+export function CmdPalette({ q, setQ, onClose, onSelect, patients, recentIds = [], onDLPViolation }: any) {
   const fuzzyMatch = (str: string, query: string) => {
     if (!query) return true;
     const s = str.toLowerCase();
@@ -42,7 +43,12 @@ export function CmdPalette({ q, setQ, onClose, onSelect, patients, recentIds = [
           <div key={p.id} className="cmd-item" onClick={() => onSelect(p.id)}>
             <div className="cmd-item-icon">{icons[p.phase] || <User size={14} />}{p.alert === 'DTQ_POSITIVE' ? <AlertTriangle size={14} style={{display:'inline', verticalAlign:'text-bottom', color:'var(--red)'}}/> : ''}</div>
             <div>
-              <div className="cmd-item-main">{p.id} <span style={{color:'var(--t3)', fontWeight:400, fontSize:'11px', marginLeft:'4px'}}>{p.name}</span></div>
+              <div className="cmd-item-main">
+                <DLPWrapper onViolation={onDLPViolation}>{p.id}</DLPWrapper> 
+                <span style={{color:'var(--t3)', fontWeight:400, fontSize:'11px', marginLeft:'4px'}}>
+                  <DLPWrapper onViolation={onDLPViolation}>{p.name}</DLPWrapper>
+                </span>
+              </div>
               <div className="cmd-item-sub">{p.phaseLabel} · {p.loc}</div>
             </div>
           </div>

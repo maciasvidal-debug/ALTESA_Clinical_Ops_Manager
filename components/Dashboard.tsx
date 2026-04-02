@@ -9,12 +9,13 @@ import {
   type Patient, type Notification, 
   fmtHuman, fmtISO, getTodayPct, countTasks, TODAY 
 } from '@/lib/data';
+import { DLPWrapper } from '@/components/DLPWrapper';
 
 interface DashboardProps {
   patients: Patient[];
   notifications: Notification[];
-  dashFilter: string;
-  setDashFilter: (f: string) => void;
+  dashFilter: 'all' | 'crit' | 'warn' | 'routine';
+  setDashFilter: (f: 'all' | 'crit' | 'warn' | 'routine') => void;
   onOpenSearch: () => void;
   onOpenBriefing: () => void;
   onOpenNotif: () => void;
@@ -22,12 +23,13 @@ interface DashboardProps {
   onOpenAddPatient: () => void;
   onLock: () => void;
   onOpenPatient: (id: string) => void;
+  onDLPViolation: (action: string) => void;
 }
 
 export const Dashboard = ({ 
   patients, notifications, dashFilter, setDashFilter, 
   onOpenSearch, onOpenBriefing, onOpenNotif, onOpenHelp, 
-  onOpenAddPatient, onLock, onOpenPatient 
+  onOpenAddPatient, onLock, onOpenPatient, onDLPViolation 
 }: DashboardProps) => {
   const crits = patients.filter(p => p.alert === 'DTQ_POSITIVE');
   const warns = patients.filter(p => p.alert && p.alert !== 'DTQ_POSITIVE');
@@ -51,13 +53,13 @@ export const Dashboard = ({
       {crits.length > 0 && (
         <div className="crit-banner">
           <div className="crit-pulse"></div>
-          <div className="crit-text"><strong>RV Protocol Active:</strong> {crits.map(p => p.id).join(', ')} — DTQ Positive · 48 h + 6 h window running</div>
+          <div className="crit-text"><strong>RV Protocol Active:</strong> {crits.map(p => <DLPWrapper key={p.id} onViolation={onDLPViolation}>{p.id}</DLPWrapper>).reduce((prev, curr) => [prev, ', ', curr] as any)} — DTQ Positive · 48 h + 6 h window running</div>
           <button className="crit-action" onClick={() => onOpenPatient(crits[0].id)}>Open Patient <ChevronRight size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/></button>
         </div>
       )}
       {warns.filter(p => p.alert === 'MONTHLY_CALL').length > 0 && (
         <div className="warn-banner">
-          <strong>Monthly call due:</strong> {warns.filter(p => p.alert === 'MONTHLY_CALL').map(p => `${p.id} (±5 days)`).join(', ')}
+          <strong>Monthly call due:</strong> {warns.filter(p => p.alert === 'MONTHLY_CALL').map(p => <span key={p.id}><DLPWrapper onViolation={onDLPViolation}>{p.id}</DLPWrapper> (±5 days)</span>).reduce((prev, curr) => [prev, ', ', curr] as any)}
         </div>
       )}
       <div className="hdr">
@@ -118,8 +120,12 @@ export const Dashboard = ({
                 onClick={() => onOpenPatient(p.id)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenPatient(p.id); } }}>
                 <div className="pt-meta">
-                  <div className="pt-id">{p.id}</div>
-                  <div className="pt-name" style={{fontSize:'11px', color:'var(--t3)', marginTop:'2px'}}>{p.name}</div>
+                  <div className="pt-id">
+                    <DLPWrapper onViolation={onDLPViolation}>{p.id}</DLPWrapper>
+                  </div>
+                  <div className="pt-name" style={{fontSize:'11px', color:'var(--t3)', marginTop:'2px'}}>
+                    <DLPWrapper onViolation={onDLPViolation}>{p.name}</DLPWrapper>
+                  </div>
                   <div className="pt-phase-lbl">
                     <span className={`phase-badge ${phBadge}`} style={{ padding: '1px 7px', fontSize: '10px' }}>{p.phaseLabel.split('·')[0].trim()}</span>
                   </div>
