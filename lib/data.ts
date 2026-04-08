@@ -16,8 +16,34 @@ export function fmtHuman(d: Date) {
 }
 
 export function getTodayPct(p: any) {
-  const totalDays = 560;
-  return Math.min(100, Math.max(0, (diffDays(p.screeningDate, TODAY) / totalDays) * 100));
+  const SCR_PCT = 10.0;
+  const PSB_PCT = 60.0;
+  const RV_PCT = 2.0;
+  const TX_PCT = 12.0;
+  const FUP_PCT = 16.0;
+
+  if (p.phaseCode === 'scr') {
+    // Screening is up to 42 days
+    const days = Math.max(0, diffDays(p.screeningDate, TODAY));
+    return Math.min(SCR_PCT, (days / 42) * SCR_PCT);
+  } 
+  else if (p.phaseCode === 'psb') {
+    // PSB is up to 476 days (68 weeks)
+    const days = Math.max(0, diffDays(p.psbStartDate || p.screeningDate, TODAY));
+    return SCR_PCT + Math.min(PSB_PCT, (days / 476) * PSB_PCT);
+  }
+  else if (p.phaseCode === 'tx') {
+    // Treatment is Day 1 to Day 14
+    const days = Math.max(0, diffDays(p.randomizationDate || p.rvInfectionDate || TODAY, TODAY));
+    return SCR_PCT + PSB_PCT + RV_PCT + Math.min(TX_PCT, (days / 14) * TX_PCT);
+  }
+  else if (p.phaseCode === 'fu') {
+    // Follow-up is Day 14 to Day 42 (28 days)
+    const days = Math.max(0, diffDays(p.randomizationDate || p.rvInfectionDate || TODAY, TODAY) - 14);
+    return SCR_PCT + PSB_PCT + RV_PCT + TX_PCT + Math.min(FUP_PCT, (days / 28) * FUP_PCT);
+  }
+  
+  return 100;
 }
 
 export type Notification = {
@@ -94,7 +120,7 @@ export type Patient = {
 
 export const PATIENTS: Patient[] = [
   {
-    id: 'ALTESA-047', name: 'Elena Rodriguez', phase: 'PSB', phaseCode: 'psb',
+    id: 'HMC-047', name: 'Elena Rodriguez', phase: 'PSB', phaseCode: 'psb',
     phaseLabel: 'Asymptomatic Phase · Week 45',
     loc: 'HOME→CLINIC', lang: 'English', alert: 'DTQ_POSITIVE', dtqPos: true,
     screeningDate: addDays(TODAY, -329), psbStartDate: addDays(TODAY, -315),
@@ -120,7 +146,7 @@ export const PATIENTS: Patient[] = [
     ]
   },
   {
-    id: 'ALTESA-001', name: 'James Wilson', phase: 'SCREENING', phaseCode: 'scr',
+    id: 'CUN-001', name: 'James Wilson', phase: 'SCREENING', phaseCode: 'scr',
     phaseLabel: 'Screening · Day 0',
     loc: 'CLINIC', lang: 'English', alert: null,
     screeningDate: TODAY,
@@ -156,7 +182,7 @@ export const PATIENTS: Patient[] = [
     ]
   },
   {
-    id: 'ALTESA-012', name: 'Maria Garcia', phase: 'PSB', phaseCode: 'psb',
+    id: 'HMC-012', name: 'Maria Garcia', phase: 'PSB', phaseCode: 'psb',
     phaseLabel: 'Asymptomatic Phase · Week 8',
     loc: 'HOME', lang: 'Spanish', alert: 'MONTHLY_CALL',
     screeningDate: addDays(TODAY, -70), psbStartDate: addDays(TODAY, -56),
@@ -184,7 +210,7 @@ export const PATIENTS: Patient[] = [
     ]
   },
   {
-    id: 'ALTESA-023', name: 'Robert Chen', phase: 'PSB', phaseCode: 'psb',
+    id: 'CUN-023', name: 'Robert Chen', phase: 'PSB', phaseCode: 'psb',
     phaseLabel: 'Asymptomatic Phase · Week 32',
     loc: 'HOME', lang: 'English', alert: null,
     screeningDate: addDays(TODAY, -238), psbStartDate: addDays(TODAY, -224),
@@ -203,7 +229,7 @@ export const PATIENTS: Patient[] = [
     documents: []
   },
   {
-    id: 'ALTESA-031', name: 'Sarah Miller', phase: 'TREATMENT', phaseCode: 'tx',
+    id: 'HMC-031', name: 'Sarah Miller', phase: 'TREATMENT', phaseCode: 'tx',
     phaseLabel: 'Treatment Period · Day 3 (±1)',
     loc: 'CLINIC', lang: 'English', alert: null,
     screeningDate: addDays(TODAY, -137), psbStartDate: addDays(TODAY, -123),
@@ -239,7 +265,7 @@ export const PATIENTS: Patient[] = [
     ]
   },
   {
-    id: 'ALTESA-039', name: 'Antonio Lopez', phase: 'TREATMENT', phaseCode: 'tx',
+    id: 'HMC-039', name: 'Antonio Lopez', phase: 'TREATMENT', phaseCode: 'tx',
     phaseLabel: 'Treatment Period · Day 14 (±2)',
     loc: 'CLINIC', lang: 'Spanish', alert: null,
     screeningDate: addDays(TODAY, -148), psbStartDate: addDays(TODAY, -134),
@@ -273,7 +299,7 @@ export const PATIENTS: Patient[] = [
     ]
   },
   {
-    id: 'ALTESA-058', name: 'Linda Thompson', phase: 'PSB', phaseCode: 'psb',
+    id: 'CUN-058', name: 'Linda Thompson', phase: 'PSB', phaseCode: 'psb',
     phaseLabel: 'Asymptomatic Phase · Week 65',
     loc: 'HOME', lang: 'English', alert: 'RESCREENING',
     screeningDate: addDays(TODAY, -469), psbStartDate: addDays(TODAY, -455),
@@ -298,7 +324,7 @@ export const PATIENTS: Patient[] = [
     ]
   },
   {
-    id: 'ALTESA-067', name: 'Michael Brown', phase: 'FOLLOWUP', phaseCode: 'fu',
+    id: 'HMC-067', name: 'Michael Brown', phase: 'FOLLOWUP', phaseCode: 'fu',
     phaseLabel: 'Follow-up · Day 28 (±3)',
     loc: 'CLINIC', lang: 'English', alert: null,
     screeningDate: addDays(TODAY, -202), psbStartDate: addDays(TODAY, -188),

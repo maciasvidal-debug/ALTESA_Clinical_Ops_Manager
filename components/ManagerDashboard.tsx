@@ -5,10 +5,11 @@ import {
   BarChart2, AlertTriangle, CheckCircle2, Clock, 
   Activity, Shield, Calendar, ChevronRight, 
   Search, Filter, MessageSquare, Lock, FileText,
-  TrendingUp, Map
+  TrendingUp, Map, List, LayoutGrid, Upload, X, Terminal, Download
 } from 'lucide-react';
 import { Patient, countTasks, TODAY, diffDays, fmtHuman } from '@/lib/data';
 import { DLPWrapper } from '@/components/DLPWrapper';
+import { verifyAndDecrypt, encryptAndSign } from '@/lib/crypto';
 
 interface ManagerDashboardProps {
   patients: Patient[];
@@ -17,12 +18,60 @@ interface ManagerDashboardProps {
   onDLPViolation: (action: string) => void;
   isChecked: (pid: string, code: string) => boolean;
   onOpenPatient: (id: string) => void;
+  onImportPatients: (patients: Patient[]) => void;
 }
 
-export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, isChecked, onOpenPatient }: ManagerDashboardProps) {
+export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, isChecked, onOpenPatient, onImportPatients }: ManagerDashboardProps) {
   const [activeTab, setActiveTab] = useState<'tracker' | 'risk' | 'queries'>('tracker');
+  const [trackerView, setTrackerView] = useState<'board' | 'grid' | 'calendar'>('board');
   const [siteFilter, setSiteFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  
+  // Sync Modal State
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncLogs, setSyncLogs] = useState<string[]>([]);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsSyncing(true);
+    setSyncLogs(["[SYSTEM] Initiating secure import protocol..."]);
+    let allImported: Patient[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setSyncLogs(prev => [...prev, `[READ] Loading ${file.name}...`]);
+      try {
+        const text = await file.text();
+        const pkg = JSON.parse(text);
+        
+        setSyncLogs(prev => [...prev, `[CRYPTO] Verifying ECDSA signature for ${file.name}...`]);
+        await new Promise(r => setTimeout(r, 600)); // Simulate crypto delay
+        
+        setSyncLogs(prev => [...prev, `[CRYPTO] Decrypting AES-256-GCM payload...`]);
+        await new Promise(r => setTimeout(r, 400));
+        
+        const data = await verifyAndDecrypt(pkg, 'MGR-PRIV-MOCK', 'CRC-PUB-MOCK');
+        allImported = [...allImported, ...data];
+        
+        setSyncLogs(prev => [...prev, `[SUCCESS] Decrypted ${data.length} records from ${file.name}.`]);
+      } catch (err: any) {
+        setSyncLogs(prev => [...prev, `[ERROR] Failed processing ${file.name}: ${err.message}`]);
+      }
+    }
+
+    if (allImported.length > 0) {
+      setSyncLogs(prev => [...prev, `[DB] Merging ${allImported.length} records into secure storage...`]);
+      await new Promise(r => setTimeout(r, 500));
+      onImportPatients(allImported);
+      setSyncLogs(prev => [...prev, `[SYSTEM] Import complete. Dashboard updated.`]);
+    } else {
+      setSyncLogs(prev => [...prev, `[SYSTEM] Import finished with 0 records.`]);
+    }
+    setIsSyncing(false);
+  };
 
   // Derive sites from patient IDs (e.g., "SITEA-001" -> "SITEA")
   const sites = useMemo(() => {
@@ -51,12 +100,20 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
     return result;
   }, [patients, siteFilter, searchQuery]);
 
+  const filteredQueries = useMemo(() => {
+    let result = queries;
+    if (siteFilter !== 'ALL') {
+      result = result.filter(q => q.pid.startsWith(siteFilter + '-') || (siteFilter === 'UNKNOWN' && !q.pid.includes('-')));
+    }
+    return result;
+  }, [queries, siteFilter]);
+
   // KPIs
   const kpis = useMemo(() => {
     let overdues = 0;
     let todays = 0;
     let active = filteredPatients.length;
-    let openQueries = queries.filter(q => q.status === 'open').length;
+    let openQueries = filteredQueries.filter(q => q.status === 'open').length;
 
     filteredPatients.forEach(p => {
       const allTasks = [...(p.tasks.q || []), ...(p.tasks.pr || []), ...(p.tasks.l || []), ...(p.tasks.ad || [])];
@@ -70,7 +127,7 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
     });
 
     return { overdues, todays, active, openQueries };
-  }, [filteredPatients, queries, isChecked]);
+  }, [filteredPatients, filteredQueries, isChecked]);
 
   // Tracker Columns
   const columns = [
@@ -81,40 +138,87 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
     { id: 'fu', label: 'Follow-up' }
   ];
 
+  // Tour State
+  const [tourStep, setTourStep] = useState<number>(0); // 0 = off, 1 = Export Key, 2 = Data Sync, 3 = Export Queries
+
+  const nextTourStep = () => {
+    if (tourStep === 1) setTourStep(2);
+    else if (tourStep === 2) {
+      setActiveTab('queries');
+      setTourStep(3);
+    }
+    else setTourStep(0);
+  };
+
   return (
-    <div className="screen" style={{ background: '#F1F5F9', minHeight: '100vh' }}>
+    <div className="screen" style={{ background: '#F1F5F9', minHeight: '100vh', position: 'relative' }}>
+      
+      {/* Tour Overlay */}
+      {tourStep > 0 && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.7)', zIndex: 900, backdropFilter: 'blur(2px)' }} onClick={() => setTourStep(0)} />
+      )}
+
       {/* Header */}
-      <div className="hdr" style={{ background: '#0F172A', color: '#fff', borderBottom: 'none' }}>
+      <div className="hdr" style={{ background: '#0F172A', color: '#fff', borderBottom: 'none', position: 'relative', zIndex: (tourStep === 1 || tourStep === 2) ? 1000 : 10 }}>
         <div className="hdr-left">
           <div className="wordmark" style={{ color: '#fff' }}>ALTE<em style={{ color: '#38BDF8' }}>SA</em></div>
           <span className="hdr-context" style={{ color: '#94A3B8', borderLeft: '1px solid #334155' }}>Study Overview</span>
         </div>
-        <div className="hdr-center">
-          <div style={{ display: 'flex', background: '#1E293B', borderRadius: '6px', padding: '4px' }}>
-            <button className={`ftab ${activeTab === 'tracker' ? 'active' : ''}`} style={{ color: activeTab === 'tracker' ? '#fff' : '#94A3B8', background: activeTab === 'tracker' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('tracker')}><Map size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Subject Tracker</button>
-            <button className={`ftab ${activeTab === 'risk' ? 'active' : ''}`} style={{ color: activeTab === 'risk' ? '#fff' : '#94A3B8', background: activeTab === 'risk' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('risk')}><TrendingUp size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Risk & Heatmap</button>
-            <button className={`ftab ${activeTab === 'queries' ? 'active' : ''}`} style={{ color: activeTab === 'queries' ? '#fff' : '#94A3B8', background: activeTab === 'queries' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('queries')}><MessageSquare size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Queries</button>
-          </div>
+        <div className="hdr-center" style={{ display: 'flex', gap: '8px' }}>
+          <button className={`ftab ${activeTab === 'tracker' ? 'active' : ''}`} style={{ color: activeTab === 'tracker' ? '#fff' : '#94A3B8', background: activeTab === 'tracker' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('tracker')}><Map size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Subject Tracker</button>
+          <button className={`ftab ${activeTab === 'risk' ? 'active' : ''}`} style={{ color: activeTab === 'risk' ? '#fff' : '#94A3B8', background: activeTab === 'risk' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('risk')}><TrendingUp size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Risk & Heatmap</button>
+          <button className={`ftab ${activeTab === 'queries' ? 'active' : ''}`} style={{ color: activeTab === 'queries' ? '#fff' : '#94A3B8', background: activeTab === 'queries' ? '#334155' : 'transparent', border: 'none', position: 'relative', zIndex: tourStep === 3 ? 1000 : 1, boxShadow: tourStep === 3 ? '0 0 0 2px #8B5CF6' : 'none' }} onClick={() => setActiveTab('queries')}><MessageSquare size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Queries</button>
         </div>
         <div className="hdr-right" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ position: 'relative' }}>
-            <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
-            <input 
-              type="text" 
-              placeholder="Search patients..." 
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              style={{ background: '#1E293B', color: '#fff', border: '1px solid #334155', borderRadius: '6px', padding: '6px 12px 6px 30px', fontSize: '13px', outline: 'none', width: '200px' }}
-            />
-          </div>
-          <select 
-            value={siteFilter} 
-            onChange={e => setSiteFilter(e.target.value)}
-            style={{ background: '#1E293B', color: '#fff', border: '1px solid #334155', borderRadius: '6px', padding: '6px 12px', fontSize: '13px', outline: 'none' }}
+          <button 
+            type="button" 
+            className="btn btn-secondary" 
+            style={{ minHeight: '32px', padding: '6px 12px', fontSize: '13px', background: '#334155', color: '#fff', border: 'none', borderRadius: '6px' }} 
+            onClick={() => setTourStep(1)}
           >
-            <option value="ALL">Global (All Sites)</option>
-            {sites.map(s => <option key={s} value={s}>Site: {s}</option>)}
-          </select>
+            <Shield size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Security Tour
+          </button>
+          <div style={{ position: 'relative', zIndex: tourStep === 1 ? 1000 : 1, boxShadow: tourStep === 1 ? '0 0 0 4px rgba(245, 158, 11, 0.5)' : 'none', borderRadius: '6px' }}>
+            {tourStep === 1 && (
+              <div style={{ position: 'absolute', top: '45px', right: '0', background: '#78350F', color: '#fff', padding: '16px', borderRadius: '8px', width: '320px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.2)', textAlign: 'left' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#FCD34D', marginBottom: '4px' }}>STEP 1 OF 3</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Export Public Key</div>
+                <div style={{ fontSize: '13px', color: '#FEF3C7', marginBottom: '12px' }}>Export your public key and send it to your Coordinators so they can encrypt data for you.</div>
+                <button onClick={nextTourStep} style={{ background: '#F59E0B', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>Next <ChevronRight size={14} /></button>
+              </div>
+            )}
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              style={{ minHeight: '32px', padding: '6px 12px', fontSize: '13px', background: 'transparent', color: '#94A3B8', border: '1px solid #334155' }} 
+              onClick={() => {
+                const blob = new Blob(["MGR-PUB-KEY-MOCK-8A9B2C"], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Manager_Public_Key.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                if (tourStep === 1) nextTourStep();
+              }} 
+              title="Export Public Key"
+            >
+              <Shield size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Export Key
+            </button>
+          </div>
+          <div style={{ position: 'relative', zIndex: tourStep === 2 ? 1000 : 1, boxShadow: tourStep === 2 ? '0 0 0 4px rgba(56, 189, 248, 0.5)' : 'none', borderRadius: '6px' }}>
+            {tourStep === 2 && (
+              <div style={{ position: 'absolute', top: '45px', right: '0', background: '#0369A1', color: '#fff', padding: '16px', borderRadius: '8px', width: '320px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.2)', textAlign: 'left' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#7DD3FC', marginBottom: '4px' }}>STEP 2 OF 3</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Sync Coordinator Data</div>
+                <div style={{ fontSize: '13px', color: '#E0F2FE', marginBottom: '12px' }}>Import the encrypted .enc packages sent by your Coordinators to update your dashboard.</div>
+                <button onClick={nextTourStep} style={{ background: '#0EA5E9', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>Next <ChevronRight size={14} /></button>
+              </div>
+            )}
+            <button type="button" className="btn btn-primary" style={{ minHeight: '32px', padding: '6px 12px', fontSize: '13px', background: '#38BDF8', color: '#0F172A', border: 'none' }} onClick={() => { setSyncModalOpen(true); if (tourStep === 2) nextTourStep(); }} title="Import Data"><FileText size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Data Sync</button>
+          </div>
           <button type="button" className="ibtn" style={{ border: 'none', background: 'transparent', color: '#94A3B8' }} onClick={onLock} title="Lock Session"><Lock size={14} /></button>
         </div>
       </div>
@@ -141,8 +245,60 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
           </div>
         </div>
 
+        {/* Control Bar */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', background: '#fff', padding: '12px 16px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          
+          {/* Left: Site Context Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Map size={14} /> Site Context
+            </div>
+            <div style={{ display: 'flex', gap: '4px', background: '#F1F5F9', padding: '4px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+              <button 
+                onClick={() => setSiteFilter('ALL')}
+                style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: siteFilter === 'ALL' ? '#fff' : 'transparent', color: siteFilter === 'ALL' ? '#0F172A' : '#64748B', boxShadow: siteFilter === 'ALL' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, transition: 'all 0.2s' }}
+              >
+                Global (All)
+              </button>
+              {sites.map(s => (
+                <button 
+                  key={s}
+                  onClick={() => setSiteFilter(s)}
+                  style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: siteFilter === s ? '#fff' : 'transparent', color: siteFilter === s ? '#0F172A' : '#64748B', boxShadow: siteFilter === s ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, transition: 'all 0.2s' }}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Right: Search and View Toggles */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+              <input 
+                type="text" 
+                placeholder="Search patients..." 
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{ background: '#F8FAFC', color: '#0F172A', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '6px 12px 6px 30px', fontSize: '13px', outline: 'none', width: '200px', transition: 'all 0.2s' }}
+              />
+            </div>
+            {activeTab === 'tracker' && (
+              <>
+                <div style={{ width: '1px', height: '24px', background: '#E2E8F0', margin: '0 4px' }}></div>
+                <div style={{ display: 'flex', background: '#F1F5F9', borderRadius: '8px', padding: '4px', border: '1px solid #E2E8F0' }}>
+                  <button onClick={() => setTrackerView('board')} style={{ padding: '6px 10px', borderRadius: '6px', background: trackerView === 'board' ? '#fff' : 'transparent', border: 'none', boxShadow: trackerView === 'board' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', fontSize: '12px', cursor: 'pointer', color: trackerView === 'board' ? '#0F172A' : '#64748B', fontWeight: trackerView === 'board' ? 600 : 400, display: 'flex', alignItems: 'center', gap: '6px' }}><LayoutGrid size={14} /> Board</button>
+                  <button onClick={() => setTrackerView('grid')} style={{ padding: '6px 10px', borderRadius: '6px', background: trackerView === 'grid' ? '#fff' : 'transparent', border: 'none', boxShadow: trackerView === 'grid' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', fontSize: '12px', cursor: 'pointer', color: trackerView === 'grid' ? '#0F172A' : '#64748B', fontWeight: trackerView === 'grid' ? 600 : 400, display: 'flex', alignItems: 'center', gap: '6px' }}><List size={14} /> List</button>
+                  <button onClick={() => setTrackerView('calendar')} style={{ padding: '6px 10px', borderRadius: '6px', background: trackerView === 'calendar' ? '#fff' : 'transparent', border: 'none', boxShadow: trackerView === 'calendar' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', fontSize: '12px', cursor: 'pointer', color: trackerView === 'calendar' ? '#0F172A' : '#64748B', fontWeight: trackerView === 'calendar' ? 600 : 400, display: 'flex', alignItems: 'center', gap: '6px' }}><Calendar size={14} /> Calendar</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
         {/* Tracker */}
-        {activeTab === 'tracker' && (
+        {activeTab === 'tracker' && trackerView === 'board' && (
           <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '16px' }}>
             {columns.map(col => {
               const colPatients = filteredPatients.filter(p => p.phaseCode === col.id);
@@ -182,6 +338,76 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
                     {colPatients.length === 0 && (
                       <div style={{ textAlign: 'center', padding: '24px 0', color: '#94A3B8', fontSize: '13px' }}>No subjects</div>
                     )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {activeTab === 'tracker' && trackerView === 'grid' && (
+          <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', textAlign: 'left', color: '#64748B' }}>
+                  <th style={{ padding: '16px', fontWeight: 500 }}>Secure ID</th>
+                  <th style={{ padding: '16px', fontWeight: 500 }}>Site</th>
+                  <th style={{ padding: '16px', fontWeight: 500 }}>Phase</th>
+                  <th style={{ padding: '16px', fontWeight: 500 }}>Next Visit</th>
+                  <th style={{ padding: '16px', fontWeight: 500 }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPatients.map(p => (
+                  <tr key={p.id} onClick={() => onOpenPatient(p.id)} style={{ borderBottom: '1px solid #E2E8F0', cursor: 'pointer' }}>
+                    <td style={{ padding: '16px', fontFamily: 'monospace', color: '#3B82F6' }}>{btoa(p.id).substring(0,8)}</td>
+                    <td style={{ padding: '16px' }}>{p.id.split('-')[0]}</td>
+                    <td style={{ padding: '16px' }}>{p.phaseLabel}</td>
+                    <td style={{ padding: '16px' }}>{p.nextVisit ? new Date(p.nextVisit).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}</td>
+                    <td style={{ padding: '16px' }}>
+                      {p.alert === 'DTQ_POSITIVE' ? (
+                        <span style={{ color: '#DC2626', background: '#FEF2F2', padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 500 }}>Critical</span>
+                      ) : p.alert ? (
+                        <span style={{ color: '#D97706', background: '#FFFBEB', padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 500 }}>Warning</span>
+                      ) : (
+                        <span style={{ color: '#10B981', background: '#ECFDF5', padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 500 }}>On Track</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {filteredPatients.length === 0 && (
+                  <tr>
+                    <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#94A3B8' }}>No subjects found</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {activeTab === 'tracker' && trackerView === 'calendar' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '16px' }}>
+            {Array(14).fill(0).map((_, i) => {
+              const d = new Date(TODAY);
+              d.setDate(d.getDate() + i);
+              const dayPatients = filteredPatients.filter(p => {
+                if (!p.nextVisit) return false;
+                const nv = new Date(p.nextVisit);
+                return nv.getFullYear() === d.getFullYear() && nv.getMonth() === d.getMonth() && nv.getDate() === d.getDate();
+              });
+              
+              return (
+                <div key={i} style={{ background: '#fff', borderRadius: '8px', border: '1px solid #E2E8F0', minHeight: '120px', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ padding: '8px 12px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC', fontSize: '12px', fontWeight: 600, color: '#475569', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
+                    {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </div>
+                  <div style={{ padding: '8px', flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {dayPatients.map(p => (
+                      <div key={p.id} onClick={() => onOpenPatient(p.id)} style={{ fontSize: '11px', padding: '4px 8px', background: p.alert === 'DTQ_POSITIVE' ? '#FEF2F2' : '#F1F5F9', color: p.alert === 'DTQ_POSITIVE' ? '#DC2626' : '#334155', borderRadius: '4px', cursor: 'pointer', border: `1px solid ${p.alert === 'DTQ_POSITIVE' ? '#FECACA' : '#E2E8F0'}` }}>
+                        {btoa(p.id).substring(0,8)} ({p.id.split('-')[0]})
+                      </div>
+                    ))}
+                    {dayPatients.length === 0 && <div style={{ fontSize: '11px', color: '#94A3B8', textAlign: 'center', marginTop: '8px' }}>No visits</div>}
                   </div>
                 </div>
               );
@@ -242,6 +468,43 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
         {/* Queries */}
         {activeTab === 'queries' && (
           <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+            <div style={{ padding: '16px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>Active Queries</h3>
+              <div style={{ position: 'relative', zIndex: tourStep === 3 ? 1000 : 1, boxShadow: tourStep === 3 ? '0 0 0 4px rgba(139, 92, 246, 0.5)' : 'none', borderRadius: '6px' }}>
+                {tourStep === 3 && (
+                  <div style={{ position: 'absolute', top: '40px', right: '0', background: '#4C1D95', color: '#fff', padding: '16px', borderRadius: '8px', width: '320px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.2)', textAlign: 'left' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#C4B5FD', marginBottom: '4px' }}>STEP 3 OF 3</div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Export Queries</div>
+                    <div style={{ fontSize: '13px', color: '#EDE9FE', marginBottom: '12px' }}>After reviewing the data, export your queries securely. Send this file back to your Coordinators.</div>
+                    <button onClick={nextTourStep} style={{ background: '#8B5CF6', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>Finish Tour <CheckCircle2 size={14} /></button>
+                  </div>
+                )}
+                <button 
+                  className="btn btn-primary" 
+                  style={{ padding: '6px 12px', fontSize: '12px', background: '#8B5CF6', color: '#fff', border: 'none' }}
+                  onClick={async () => {
+                    try {
+                      const pkg = await encryptAndSign(filteredQueries, 'CRC-PUB-MOCK', 'MGR-PRIV-MOCK');
+                      const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `ALTESA_Queries_${new Date().toISOString().split('T')[0]}.enc`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                      if (tourStep === 3) nextTourStep();
+                    } catch (err) {
+                      console.error(err);
+                      alert("Failed to export queries.");
+                    }
+                  }}
+                >
+                  <Download size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Export Queries
+                </button>
+              </div>
+            </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', textAlign: 'left', color: '#64748B' }}>
@@ -254,12 +517,12 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
                 </tr>
               </thead>
               <tbody>
-                {queries.length === 0 ? (
+                {filteredQueries.length === 0 ? (
                   <tr>
                     <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#94A3B8' }}>No active queries</td>
                   </tr>
                 ) : (
-                  queries.map((q) => (
+                  filteredQueries.map((q) => (
                     <tr key={q.id} onClick={() => onOpenPatient(q.pid)} style={{ borderBottom: '1px solid #E2E8F0', cursor: 'pointer' }}>
                       <td style={{ padding: '16px', fontFamily: 'monospace', color: '#3B82F6' }}>{q.id}</td>
                       <td style={{ padding: '16px', fontFamily: 'monospace', color: '#64748B' }}>{btoa(q.pid).substring(0,8)}</td>
@@ -284,6 +547,82 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
         )}
 
       </div>
+
+      {/* Sync Modal */}
+      {syncModalOpen && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => !isSyncing && setSyncModalOpen(false)}>
+          <div className="modal-card" style={{ background: '#fff', borderRadius: '16px', width: '600px', maxWidth: '90vw', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '24px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ background: '#E0F2FE', padding: '8px', borderRadius: '8px' }}>
+                  <Shield size={24} color="#0284C7" />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#0F172A', margin: 0 }}>Secure Data Import</h2>
+                  <p style={{ fontSize: '13px', color: '#64748B', margin: '4px 0 0 0' }}>Import encrypted .enc packages from Coordinators</p>
+                </div>
+              </div>
+              {!isSyncing && (
+                <button onClick={() => setSyncModalOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#94A3B8' }}>
+                  <X size={20} />
+                </button>
+              )}
+            </div>
+
+            <div style={{ padding: '24px' }}>
+              {/* File Drop Zone */}
+              <div style={{ border: '2px dashed #CBD5E1', borderRadius: '12px', padding: '40px 24px', textAlign: 'center', background: '#F8FAFC', marginBottom: '24px', position: 'relative', transition: 'all 0.2s' }}>
+                <input 
+                  type="file" 
+                  multiple 
+                  accept=".enc" 
+                  onChange={handleFileUpload}
+                  disabled={isSyncing}
+                  style={{ position: 'absolute', inset: 0, opacity: 0, cursor: isSyncing ? 'not-allowed' : 'pointer', width: '100%' }}
+                />
+                <Upload size={32} color="#94A3B8" style={{ margin: '0 auto 12px auto' }} />
+                <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#334155', margin: '0 0 4px 0' }}>Select or drop .enc files here</h3>
+                <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>Supports multiple site packages simultaneously</p>
+              </div>
+
+              {/* Audit Log Terminal */}
+              <div style={{ background: '#0F172A', borderRadius: '8px', padding: '16px', minHeight: '160px', maxHeight: '240px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '12px', color: '#10B981', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.5)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#64748B', borderBottom: '1px solid #334155', paddingBottom: '8px' }}>
+                  <Terminal size={14} /> <span>Security Audit Log</span>
+                </div>
+                {syncLogs.length === 0 ? (
+                  <div style={{ color: '#475569' }}>Waiting for input...</div>
+                ) : (
+                  syncLogs.map((log, i) => (
+                    <div key={i} style={{ marginBottom: '4px', lineHeight: 1.4 }}>
+                      <span style={{ color: '#64748B' }}>{new Date().toISOString().split('T')[1].substring(0,8)}</span>{' '}
+                      <span style={{ color: log.includes('ERROR') ? '#EF4444' : log.includes('SUCCESS') ? '#34D399' : log.includes('CRYPTO') ? '#38BDF8' : '#10B981' }}>
+                        {log}
+                      </span>
+                    </div>
+                  ))
+                )}
+                {isSyncing && (
+                  <div style={{ marginTop: '8px', display: 'flex', gap: '4px' }}>
+                    <div className="crit-pulse" style={{ width: '8px', height: '8px', background: '#10B981', animationDuration: '1s' }}></div>
+                    <span style={{ color: '#10B981' }}>Processing...</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div style={{ padding: '16px 24px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end' }}>
+              <button 
+                onClick={() => setSyncModalOpen(false)} 
+                disabled={isSyncing}
+                style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '14px', fontWeight: 500, background: isSyncing ? '#E2E8F0' : '#fff', color: isSyncing ? '#94A3B8' : '#334155', border: '1px solid #CBD5E1', cursor: isSyncing ? 'not-allowed' : 'pointer' }}
+              >
+                {syncLogs.length > 0 && !isSyncing ? 'Close' : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

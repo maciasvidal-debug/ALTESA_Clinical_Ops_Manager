@@ -1,9 +1,11 @@
 'use client';
 
+import React, { useState } from 'react';
 import { 
   Search, Bell, HelpCircle, UserPlus, Lock, 
   AlertTriangle, Check, Phone, Activity, 
-  ChevronRight, ClipboardList, User
+  ChevronRight, ClipboardList, User, Settings as SettingsIcon,
+  LayoutGrid, List, Calendar as CalendarIcon
 } from 'lucide-react';
 import { 
   type Patient, type Notification, 
@@ -21,6 +23,7 @@ interface DashboardProps {
   onOpenNotif: () => void;
   onOpenHelp: () => void;
   onOpenAddPatient: () => void;
+  onOpenSettings: () => void;
   onLock: () => void;
   onOpenPatient: (id: string) => void;
   onDLPViolation: (action: string) => void;
@@ -29,8 +32,10 @@ interface DashboardProps {
 export const Dashboard = ({ 
   patients, notifications, dashFilter, setDashFilter, 
   onOpenSearch, onOpenBriefing, onOpenNotif, onOpenHelp, 
-  onOpenAddPatient, onLock, onOpenPatient, onDLPViolation 
+  onOpenAddPatient, onOpenSettings, onLock, onOpenPatient, onDLPViolation 
 }: DashboardProps) => {
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'calendar'>('grid');
+
   const crits = patients.filter(p => p.alert === 'DTQ_POSITIVE');
   const warns = patients.filter(p => p.alert && p.alert !== 'DTQ_POSITIVE');
   const clinicToday = patients.filter(p => p.loc.includes('CLINIC'));
@@ -65,28 +70,24 @@ export const Dashboard = ({
       <div className="hdr">
         <div className="hdr-left">
           <div className="wordmark">ALTE<em>SA</em></div>
-          <span className="hdr-context">VPV Study</span>
+          <span className="hdr-context">Coordinator Dashboard</span>
         </div>
-        <div className="hdr-center">
-          <button className="search-trigger" onClick={onOpenSearch}>
-            <Search size={14} />
-            <span>Search patients, tasks, or glossary...</span>
-            <span className="search-shortcut">⌘K</span>
-          </button>
-        </div>
-        <div className="hdr-right">
-          <div className="nav-group">
-            <button type="button" className="ibtn" onClick={onOpenBriefing} title="Daily Briefing"><ClipboardList size={14} /> Briefing</button>
+        <div className="hdr-right" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div className="nav-group" style={{ display: 'flex', gap: '8px' }}>
+            <button type="button" className="ibtn" onClick={onOpenBriefing} title="Daily Briefing"><ClipboardList size={16} style={{marginRight: '6px'}} /> Briefing</button>
             <button type="button" className="ibtn relative" onClick={onOpenNotif} title="Notifications">
-              <Bell size={14} />
+              <Bell size={16} />
               {notifications.filter(n => !n.read).length > 0 && (
                 <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
               )}
             </button>
-            <button type="button" className="ibtn" onClick={onOpenHelp} title="Help & Glossary"><HelpCircle size={14} /> Help</button>
           </div>
-          <button type="button" className="btn btn-primary" style={{ minHeight: '36px', padding: '8px 16px' }} onClick={onOpenAddPatient} title="Add Patient"><UserPlus size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Add Patient</button>
-          <button type="button" className="ibtn" style={{ border: 'none', background: 'transparent' }} onClick={onLock} title="Lock Session"><Lock size={14} /></button>
+          <div style={{ width: '1px', height: '24px', background: '#E2E8F0' }}></div>
+          <div className="nav-group" style={{ display: 'flex', gap: '8px' }}>
+            <button type="button" className="ibtn" onClick={onOpenHelp} title="Help & Glossary"><HelpCircle size={16} /></button>
+            <button type="button" className="ibtn" onClick={onOpenSettings} title="Settings & Security"><SettingsIcon size={16} /></button>
+            <button type="button" className="ibtn" onClick={onLock} title="Lock Session"><Lock size={16} /></button>
+          </div>
         </div>
       </div>
       <div className="dash">
@@ -96,86 +97,212 @@ export const Dashboard = ({
           <div className="sum-cell warn"><div className="sum-v">{warns.length}</div><div className="sum-l">Pending Actions</div></div>
           <div className="sum-cell"><div className="sum-v">{clinicToday.length}</div><div className="sum-l">Clinic Visits Today</div></div>
         </div>
-        <div className="filter-tabs">
-          <button className={`ftab ${dashFilter === 'all' ? 'active' : ''}`} onClick={() => setDashFilter('all')}>All ({patients.length})</button>
-          <button className={`ftab tab-crit ${dashFilter === 'crit' ? 'active' : ''}`} onClick={() => setDashFilter('crit')}><AlertTriangle size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Critical ({crits.length})</button>
-          <button className={`ftab tab-warn ${dashFilter === 'warn' ? 'active' : ''}`} onClick={() => setDashFilter('warn')}><AlertTriangle size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Action needed ({warns.length})</button>
-          <button className={`ftab tab-ok ${dashFilter === 'routine' ? 'active' : ''}`} onClick={() => setDashFilter('routine')}><Check size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Routine ({patients.length - crits.length - warns.length})</button>
+
+        {/* Toolbar: Filters, Search, View Toggle, Add Patient */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', background: '#fff', padding: '12px 16px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div className="filter-tabs" style={{ margin: 0, padding: 0, border: 'none', background: 'transparent' }}>
+            <button className={`ftab ${dashFilter === 'all' ? 'active' : ''}`} onClick={() => setDashFilter('all')}>All ({patients.length})</button>
+            <button className={`ftab tab-crit ${dashFilter === 'crit' ? 'active' : ''}`} onClick={() => setDashFilter('crit')}><AlertTriangle size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Critical ({crits.length})</button>
+            <button className={`ftab tab-warn ${dashFilter === 'warn' ? 'active' : ''}`} onClick={() => setDashFilter('warn')}><AlertTriangle size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Action needed ({warns.length})</button>
+            <button className={`ftab tab-ok ${dashFilter === 'routine' ? 'active' : ''}`} onClick={() => setDashFilter('routine')}><Check size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Routine ({patients.length - crits.length - warns.length})</button>
+          </div>
+          
+          <div style={{ flex: 1, maxWidth: '400px', margin: '0 24px' }}>
+            <button className="search-trigger" onClick={onOpenSearch} style={{ width: '100%', margin: 0 }}>
+              <Search size={14} />
+              <span>Search patients, tasks...</span>
+              <span className="search-shortcut">⌘K</span>
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ display: 'flex', background: '#F1F5F9', padding: '4px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+              <button onClick={() => setViewMode('grid')} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: viewMode === 'grid' ? '#fff' : 'transparent', color: viewMode === 'grid' ? '#0F172A' : '#64748B', boxShadow: viewMode === 'grid' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500 }}><LayoutGrid size={14} /> Grid</button>
+              <button onClick={() => setViewMode('list')} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: viewMode === 'list' ? '#fff' : 'transparent', color: viewMode === 'list' ? '#0F172A' : '#64748B', boxShadow: viewMode === 'list' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500 }}><List size={14} /> List</button>
+              <button onClick={() => setViewMode('calendar')} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: viewMode === 'calendar' ? '#fff' : 'transparent', color: viewMode === 'calendar' ? '#0F172A' : '#64748B', boxShadow: viewMode === 'calendar' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500 }}><CalendarIcon size={14} /> Calendar</button>
+            </div>
+            <button type="button" className="btn btn-primary" style={{ minHeight: '36px', padding: '8px 16px' }} onClick={onOpenAddPatient} title="Add Patient"><UserPlus size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight: '6px'}}/> Add Patient</button>
+          </div>
         </div>
         <div className="sec-hdr">
           <div className="sec-title">{visible.length} patient{visible.length !== 1 ? 's' : ''} — sorted by urgency</div>
           <div className="sec-date">{fmtHuman(TODAY)}, {fmtISO(TODAY)}</div>
         </div>
-        <div className="pt-list">
-          {visible.length > 0 ? visible.map(p => {
-            const { done, total } = countTasks(p);
-            const isCrit = p.alert === 'DTQ_POSITIVE';
-            const isWarn = p.alert && !isCrit;
-            const urgClass = isCrit ? 'crit' : isWarn ? 'warn' : done === total && total > 0 ? 'ok' : 'info';
-            const urgText = isCrit ? <><AlertTriangle size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> DTQ+ — Act now</> : isWarn ? p.alert === 'MONTHLY_CALL' ? <><Phone size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Call due</> : <><Activity size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Rescreening</> : done === total && total > 0 ? <><Check size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> All done</> : 'In progress';
-            const phBadge = { scr: 'pb-scr', psb: 'pb-psb', tx: 'pb-tx', fu: 'pb-fu' }[p.phaseCode] || 'pb-psb';
-            return (
-              <div key={p.id} className={`pt-row ${isCrit ? 'is-crit' : isWarn ? 'is-warn' : ''}`}
-                tabIndex={0} role="button" aria-label={`Open ${p.id} — ${p.phaseLabel}`}
-                onClick={() => onOpenPatient(p.id)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenPatient(p.id); } }}>
-                <div className="pt-meta">
-                  <div className="pt-id">
-                    <DLPWrapper onViolation={onDLPViolation}>{p.id}</DLPWrapper>
-                  </div>
-                  <div className="pt-name" style={{fontSize:'11px', color:'var(--t3)', marginTop:'2px'}}>
-                    <DLPWrapper onViolation={onDLPViolation}>{p.name}</DLPWrapper>
-                  </div>
-                  <div className="pt-phase-lbl">
-                    <span className={`phase-badge ${phBadge}`} style={{ padding: '1px 7px', fontSize: '10px' }}>{p.phaseLabel.split('·')[0].trim()}</span>
-                  </div>
-                  <div className="pt-progress-container" title={`${done}/${total} tasks completed`}>
-                    <div className={`pt-progress-fill ${done === total && total > 0 ? 'done' : ''}`} style={{ width: `${total > 0 ? (done / total) * 100 : 0}%` }}></div>
-                  </div>
-                  <div className="pt-loc">{p.loc.includes('CLINIC') ? '🏥' : '🏠'} {p.loc}</div>
-                </div>
-                <div className="pt-tl-cell">
-                  <div className="mini-tl">
-                    <div className="mini-tl-bar">
-                      <div className="tl-seg s-scr" title="Screening / Rescreening"><span>SCR</span></div>
-                      <div className="tl-seg s-psb" title="Pre-Symptomatic Baseline (Asymptomatic Phase)"><span className="help-term">{p.phaseCode === 'psb' ? 'PSB W' + Math.floor((p.studyDay || 0) / 7) : 'PSB'}</span></div>
-                      <div className="tl-seg s-rv" title="RV Infection — Randomisation window"></div>
-                      <div className="tl-seg s-tx" title="Treatment Period D1–D42"><span>{p.phaseCode === 'tx' ? 'Tx D' + (p.studyDay || 0) : 'TX'}</span></div>
-                      <div className="tl-seg s-fu" title="Follow-up Period"><span>FUP</span></div>
-                      <div className="tl-seg s-fut" title="End of Study / future"></div>
-                      <div className="tl-now-label" style={{ left: `${getTodayPct(p).toFixed(1)}%` }}>Today</div>
-                      <div className="tl-now-marker" style={{ left: `${getTodayPct(p).toFixed(1)}%` }}></div>
+        {viewMode === 'grid' && (
+          <div className="pt-list">
+            {visible.length > 0 ? visible.map(p => {
+              const { done, total } = countTasks(p);
+              const isCrit = p.alert === 'DTQ_POSITIVE';
+              const isWarn = p.alert && !isCrit;
+              const urgClass = isCrit ? 'crit' : isWarn ? 'warn' : done === total && total > 0 ? 'ok' : 'info';
+              const urgText = isCrit ? <><AlertTriangle size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> DTQ+ — Act now</> : isWarn ? p.alert === 'MONTHLY_CALL' ? <><Phone size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Call due</> : <><Activity size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Rescreening</> : done === total && total > 0 ? <><Check size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> All done</> : 'In progress';
+              const phBadge = { scr: 'pb-scr', psb: 'pb-psb', tx: 'pb-tx', fu: 'pb-fu' }[p.phaseCode] || 'pb-psb';
+              return (
+                <div key={p.id} className={`pt-row ${isCrit ? 'is-crit' : isWarn ? 'is-warn' : ''}`}
+                  tabIndex={0} role="button" aria-label={`Open ${p.id} — ${p.phaseLabel}`}
+                  onClick={() => onOpenPatient(p.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenPatient(p.id); } }}>
+                  <div className="pt-meta">
+                    <div className="pt-id">
+                      <DLPWrapper onViolation={onDLPViolation}>{p.id}</DLPWrapper>
                     </div>
-                    <div className="tl-label-row">
-                      <div className="tl-lbl" style={{ flex: '0 0 4%' }}>Scr</div>
-                      <div className="tl-lbl" style={{ flex: '0 0 45%', color: 'var(--blue)' }}>Asymptomatic Phase (up to 68 weeks)</div>
-                      <div className="tl-lbl" style={{ flex: '0 0 3%' }}></div>
-                      <div className="tl-lbl" style={{ flex: '0 0 12%' }}>Treatment</div>
-                      <div className="tl-lbl" style={{ flex: '0 0 8%' }}>FUP</div>
-                      <div className="tl-lbl" style={{ flex: 1 }}></div>
+                    <div className="pt-name" style={{fontSize:'11px', color:'var(--t3)', marginTop:'2px'}}>
+                      <DLPWrapper onViolation={onDLPViolation}>{p.name}</DLPWrapper>
+                    </div>
+                    <div className="pt-phase-lbl">
+                      <span className={`phase-badge ${phBadge}`} style={{ padding: '1px 7px', fontSize: '10px' }}>{p.phaseLabel.split('·')[0].trim()}</span>
+                    </div>
+                    <div className="pt-progress-container" title={`${done}/${total} tasks completed`}>
+                      <div className={`pt-progress-fill ${done === total && total > 0 ? 'done' : ''}`} style={{ width: `${total > 0 ? (done / total) * 100 : 0}%` }}></div>
+                    </div>
+                    <div className="pt-loc">{p.loc.includes('CLINIC') ? '🏥' : '🏠'} {p.loc}</div>
+                  </div>
+                  <div className="pt-tl-cell">
+                    <div className="mini-tl">
+                      <div className="mini-tl-bar">
+                        <div className="tl-seg s-scr" title="Screening / Rescreening"><span>SCR</span></div>
+                        <div className="tl-seg s-psb" title="Pre-Symptomatic Baseline (Asymptomatic Phase)"><span className="help-term">{p.phaseCode === 'psb' ? 'PSB W' + Math.floor((p.studyDay || 0) / 7) : 'PSB'}</span></div>
+                        <div className="tl-seg s-rv" title="RV Infection — Randomisation window"></div>
+                        <div className="tl-seg s-tx" title="Treatment Period D1–D14"><span>{p.phaseCode === 'tx' ? 'Tx D' + (p.studyDay || 0) : 'TX'}</span></div>
+                        <div className="tl-seg s-fu" title="Follow-up Period D14–D42"><span>FUP</span></div>
+                        <div className="tl-now-label" style={{ left: `${getTodayPct(p).toFixed(1)}%` }}>Today</div>
+                        <div className="tl-now-marker" style={{ left: `${getTodayPct(p).toFixed(1)}%` }}></div>
+                      </div>
+                      <div className="tl-label-row">
+                        <div className="tl-lbl" style={{ flex: '0 0 10%' }}>Scr</div>
+                        <div className="tl-lbl" style={{ flex: '0 0 60%', color: 'var(--blue)' }}>Asymptomatic Phase (up to 68 weeks)</div>
+                        <div className="tl-lbl" style={{ flex: '0 0 2%' }}></div>
+                        <div className="tl-lbl" style={{ flex: '0 0 12%' }}>Treatment</div>
+                        <div className="tl-lbl" style={{ flex: '0 0 16%' }}>FUP</div>
+                      </div>
                     </div>
                   </div>
+                  <div className="pt-action">
+                    <div className={`pt-urgency ${urgClass}`}>{urgText}</div>
+                    <div className="pt-tasks-count"><strong>{done}</strong>/{total} tasks</div>
+                    <div className="pt-next" title={fmtISO(p.nextVisit)}>{fmtHuman(p.nextVisit)}</div>
+                    <div className="pt-chevron"><ChevronRight size={16} /></div>
+                  </div>
                 </div>
-                <div className="pt-action">
-                  <div className={`pt-urgency ${urgClass}`}>{urgText}</div>
-                  <div className="pt-tasks-count"><strong>{done}</strong>/{total} tasks</div>
-                  <div className="pt-next" title={fmtISO(p.nextVisit)}>{fmtHuman(p.nextVisit)}</div>
-                  <div className="pt-chevron"><ChevronRight size={16} /></div>
+              );
+            }) : (
+              <div className="empty-state-card">
+                <div className="empty-icon"><UserPlus size={32} /></div>
+                <h3>Welcome to ALTESA Study Tracker</h3>
+                <p>Your dashboard is currently empty. Get started by adding your first patient or reviewing the study quick guide.</p>
+                <div className="empty-actions">
+                  <button className="btn btn-primary" onClick={onOpenAddPatient}><UserPlus size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Add First Patient</button>
+                  <button className="btn btn-ghost" onClick={onOpenHelp}><HelpCircle size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Read Quick Guide</button>
                 </div>
               </div>
-            );
-          }) : (
-            <div className="empty-state-card">
-              <div className="empty-icon"><UserPlus size={32} /></div>
-              <h3>Welcome to ALTESA Study Tracker</h3>
-              <p>Your dashboard is currently empty. Get started by adding your first patient or reviewing the study quick guide.</p>
-              <div className="empty-actions">
-                <button className="btn btn-primary" onClick={onOpenAddPatient}><UserPlus size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Add First Patient</button>
-                <button className="btn btn-ghost" onClick={onOpenHelp}><HelpCircle size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Read Quick Guide</button>
-              </div>
+            )}
+          </div>
+        )}
+
+        {viewMode === 'list' && (
+          <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', textAlign: 'left', color: '#64748B' }}>
+                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Patient ID</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Name</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Phase</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Location</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Tasks</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.length > 0 ? visible.map(p => {
+                  const { done, total } = countTasks(p);
+                  const isCrit = p.alert === 'DTQ_POSITIVE';
+                  const isWarn = p.alert && !isCrit;
+                  const urgClass = isCrit ? 'crit' : isWarn ? 'warn' : done === total && total > 0 ? 'ok' : 'info';
+                  const urgText = isCrit ? <><AlertTriangle size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> DTQ+</> : isWarn ? p.alert === 'MONTHLY_CALL' ? <><Phone size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Call due</> : <><Activity size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Rescreening</> : done === total && total > 0 ? <><Check size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Done</> : 'In progress';
+                  const phBadge = { scr: 'pb-scr', psb: 'pb-psb', tx: 'pb-tx', fu: 'pb-fu' }[p.phaseCode] || 'pb-psb';
+                  
+                  return (
+                    <tr key={p.id} 
+                      style={{ borderBottom: '1px solid #E2E8F0', cursor: 'pointer', background: isCrit ? '#FEF2F2' : isWarn ? '#FFFBEB' : '#fff' }}
+                      onClick={() => onOpenPatient(p.id)}
+                    >
+                      <td style={{ padding: '12px 16px', fontWeight: 600, color: '#0F172A' }}><DLPWrapper onViolation={onDLPViolation}>{p.id}</DLPWrapper></td>
+                      <td style={{ padding: '12px 16px', color: '#475569' }}><DLPWrapper onViolation={onDLPViolation}>{p.name}</DLPWrapper></td>
+                      <td style={{ padding: '12px 16px' }}><span className={`phase-badge ${phBadge}`} style={{ padding: '2px 8px', fontSize: '11px' }}>{p.phaseLabel.split('·')[0].trim()}</span></td>
+                      <td style={{ padding: '12px 16px', color: '#475569' }}>{p.loc.includes('CLINIC') ? '🏥' : '🏠'} {p.loc}</td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '60px', height: '6px', background: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', background: done === total && total > 0 ? '#10B981' : '#3B82F6', width: `${total > 0 ? (done / total) * 100 : 0}%` }}></div>
+                          </div>
+                          <span style={{ fontSize: '12px', color: '#64748B' }}>{done}/{total}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div className={`urg-badge ${urgClass}`} style={{ display: 'inline-flex', padding: '4px 8px' }}>{urgText}</div>
+                      </td>
+                    </tr>
+                  );
+                }) : (
+                  <tr><td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>No patients match the current filter.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {viewMode === 'calendar' && (
+          <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#0F172A', margin: 0 }}>Upcoming Schedule</h3>
+              <div style={{ fontSize: '14px', color: '#64748B' }}>{fmtHuman(TODAY)}</div>
             </div>
-          )}
-        </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '12px' }}>
+              {[0, 1, 2, 3, 4, 5, 6].map(offset => {
+                const date = new Date(TODAY);
+                date.setDate(date.getDate() + offset);
+                const isToday = offset === 0;
+                
+                // Mock logic to distribute patients across days for the calendar view
+                const dayPatients = visible.filter((p, i) => (i % 7) === offset);
+                
+                return (
+                  <div key={offset} style={{ border: `1px solid ${isToday ? '#3B82F6' : '#E2E8F0'}`, borderRadius: '8px', padding: '12px', background: isToday ? '#EFF6FF' : '#fff', minHeight: '150px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: isToday ? '#1E3A8A' : '#64748B', marginBottom: '4px', textTransform: 'uppercase' }}>
+                      {date.toLocaleDateString('en-US', { weekday: 'short' })}
+                    </div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: isToday ? '#1E3A8A' : '#0F172A', marginBottom: '12px' }}>
+                      {date.getDate()}
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {dayPatients.slice(0, 3).map(p => {
+                        const isCrit = p.alert === 'DTQ_POSITIVE';
+                        return (
+                          <div 
+                            key={p.id} 
+                            onClick={() => onOpenPatient(p.id)}
+                            style={{ padding: '6px 8px', background: isCrit ? '#FEF2F2' : '#F1F5F9', borderLeft: `3px solid ${isCrit ? '#EF4444' : '#3B82F6'}`, borderRadius: '4px', fontSize: '11px', cursor: 'pointer', color: isCrit ? '#991B1B' : '#334155', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                            title={p.name}
+                          >
+                            {p.id} {isCrit && '⚠️'}
+                          </div>
+                        );
+                      })}
+                      {dayPatients.length > 3 && (
+                        <div style={{ fontSize: '11px', color: '#64748B', textAlign: 'center', marginTop: '4px' }}>+{dayPatients.length - 3} more</div>
+                      )}
+                      {dayPatients.length === 0 && (
+                        <div style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>No tasks</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

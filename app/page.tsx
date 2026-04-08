@@ -28,6 +28,7 @@ import { AddPatientModal } from '@/components/AddPatientModal';
 import { EditPatientModal } from '@/components/EditPatientModal';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { ManagerDashboard } from '@/components/ManagerDashboard';
+import { Settings } from '@/components/Settings';
 import { Toasts } from '@/components/Toasts';
 import { Wizard } from '@/components/Wizard';
 import { RescreeningWizard } from '@/components/RescreeningWizard';
@@ -48,9 +49,11 @@ export default function App() {
   const [patients, setPatients] = useState<Patient[]>(() => 
     PATIENTS.map(p => ({ ...p, studyDay: diffDays(p.screeningDate, TODAY) }))
   );
-  const [screen, setScreen] = useState<'auth' | 'dashboard' | 'patient' | 'manager_dashboard'>('auth');
+  const [screen, setScreen] = useState<'auth' | 'dashboard' | 'patient' | 'manager_dashboard' | 'settings'>('auth');
   const [role, setRole] = useState<'coordinator' | 'manager'>('coordinator');
+  const [authMode, setAuthMode] = useState<'crc' | 'manager'>('crc');
   const [pin, setPin] = useState('');
+  const [passphrase, setPassphrase] = useState('');
   const [pinErr, setPinErr] = useState('');
   const [selPatientId, setSelPatientId] = useState<string | null>(null);
   const [hoveredTask, setHoveredTask] = useState<string | null>(null);
@@ -559,31 +562,115 @@ export default function App() {
       <div className="screen auth-wrap">
         <div className="auth-card">
           <div className="auth-wordmark">ALTE<em>SA</em></div>
-          <div className="auth-sub">VPV Study · Coordinator Platform<br/>PBKDF2-SHA256 · AES-256-GCM · No backend</div>
-          <div className="pin-track">
-            {Array(8).fill(0).map((_, i) => (
-              <div key={i} className={`pin-dot ${i < pin.length ? 'on' : ''}`}></div>
-            ))}
+          <div className="auth-sub">VPV Study · {authMode === 'crc' ? 'Coordinator' : 'Manager'} Platform<br/>PBKDF2-SHA256 · AES-256-GCM · No backend</div>
+          
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', background: '#F1F5F9', padding: '4px', borderRadius: '8px' }}>
+            <button 
+              onClick={() => { setAuthMode('crc'); setPin(''); setPinErr(''); }}
+              style={{ flex: 1, padding: '8px', border: 'none', background: authMode === 'crc' ? '#fff' : 'transparent', color: authMode === 'crc' ? '#0F172A' : '#64748B', borderRadius: '4px', fontWeight: 600, boxShadow: authMode === 'crc' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer' }}
+            >
+              Coordinator
+            </button>
+            <button 
+              onClick={() => { setAuthMode('manager'); setPassphrase(''); setPinErr(''); }}
+              style={{ flex: 1, padding: '8px', border: 'none', background: authMode === 'manager' ? '#fff' : 'transparent', color: authMode === 'manager' ? '#0F172A' : '#64748B', borderRadius: '4px', fontWeight: 600, boxShadow: authMode === 'manager' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer' }}
+            >
+              Manager
+            </button>
           </div>
-          {pinErr ? <div className="pin-hint err">{pinErr}</div> :
-           pin.length > 0 && pin.length < 4 ? <div className="pin-hint ok">{4 - pin.length} more digit{4 - pin.length === 1 ? '' : 's'} needed</div> :
-           <div className="pin-hint ok">Enter your coordinator PIN</div>}
-          <div className="keypad">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9, '', '0', '⌫'].map((k, i) => {
-              if (k === '') return <div key={i}></div>;
-              if (k === '⌫') return <button key={i} className="kk del" onClick={() => handlePin('del')}><Delete size={16} style={{display:'inline', verticalAlign:'text-bottom'}}/> Del</button>;
-              return <button key={i} className="kk" onClick={() => handlePin(k.toString())}>{k}</button>;
-            })}
-          </div>
-          <button className="kk go" onClick={() => handlePin('go')} disabled={pin.length < 4}>Unlock <ArrowRight size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/></button>
+
+          {authMode === 'crc' ? (
+            <>
+              <div className="pin-track">
+                {Array(8).fill(0).map((_, i) => (
+                  <div key={i} className={`pin-dot ${i < pin.length ? 'on' : ''}`}></div>
+                ))}
+              </div>
+              {pinErr ? <div className="pin-hint err">{pinErr}</div> :
+               pin.length > 0 && pin.length < 4 ? <div className="pin-hint ok">{4 - pin.length} more digit{4 - pin.length === 1 ? '' : 's'} needed</div> :
+               <div className="pin-hint ok">Enter your coordinator PIN</div>}
+              <div className="keypad">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, '', '0', '⌫'].map((k, i) => {
+                  if (k === '') return <div key={i}></div>;
+                  if (k === '⌫') return <button key={i} className="kk del" onClick={() => handlePin('del')}><Delete size={16} style={{display:'inline', verticalAlign:'text-bottom'}}/> Del</button>;
+                  return <button key={i} className="kk" onClick={() => handlePin(k.toString())}>{k}</button>;
+                })}
+              </div>
+              <button className="kk go" onClick={() => handlePin('go')} disabled={pin.length < 4}>Unlock <ArrowRight size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/></button>
+            </>
+          ) : (
+            <>
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#64748B', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Manager Passphrase</label>
+                <input 
+                  type="password" 
+                  value={passphrase}
+                  onChange={(e) => setPassphrase(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && passphrase.length >= 12) {
+                      setRole('manager');
+                      setScreen('manager_dashboard');
+                    }
+                  }}
+                  placeholder="Enter strong passphrase..."
+                  style={{ width: '100%', padding: '12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', outline: 'none', color: '#0F172A' }}
+                />
+                {pinErr ? <div className="pin-hint err" style={{ marginTop: '8px' }}>{pinErr}</div> :
+                 passphrase.length > 0 && passphrase.length < 12 ? <div className="pin-hint err" style={{ marginTop: '8px' }}>Passphrase must be at least 12 characters</div> :
+                 <div className="pin-hint ok" style={{ marginTop: '8px' }}>Requires strong passphrase to decrypt Manager Key</div>}
+              </div>
+              <button 
+                className="kk go" 
+                onClick={() => {
+                  if (passphrase.length >= 12) {
+                    setRole('manager');
+                    setScreen('manager_dashboard');
+                  } else {
+                    setPinErr('Passphrase too short.');
+                  }
+                }} 
+                disabled={passphrase.length < 12}
+              >
+                Unlock Dashboard <ArrowRight size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/>
+              </button>
+            </>
+          )}
+          
           <div className="auth-note">
-            <strong>Prototype mode</strong> — any PIN of ≥ 4 digits unlocks the demo.
+            <strong>Prototype mode</strong> — {authMode === 'crc' ? 'any PIN of ≥ 4 digits unlocks the demo.' : 'any passphrase ≥ 12 chars unlocks the demo.'}
             Production: 310,000-iteration PBKDF2 key derivation + 8 single-use recovery codes.
           </div>
         </div>
       </div>
     );
   }
+
+  // Settings Screen
+  if (screen === 'settings') {
+    return (
+      <Settings 
+        patients={patients} 
+        onClose={() => setScreen('dashboard')} 
+        onImportQueries={(importedQueries) => {
+          setQueries(prev => {
+            const map = new Map(prev.map(q => [q.id, q]));
+            importedQueries.forEach(q => map.set(q.id, q));
+            return Array.from(map.values());
+          });
+          showToast(`Successfully imported ${importedQueries.length} queries.`, 'ok');
+        }}
+      />
+    );
+  }
+
+  const handleImportPatients = (imported: Patient[]) => {
+    setPatients(prev => {
+      const map = new Map(prev.map(p => [p.id, p]));
+      imported.forEach(p => map.set(p.id, p));
+      return Array.from(map.values());
+    });
+    showToast(`Successfully imported ${imported.length} patient records.`, 'ok');
+  };
 
   // Manager Dashboard Screen
   if (screen === 'manager_dashboard') {
@@ -592,10 +679,11 @@ export default function App() {
         <ManagerDashboard 
           patients={patients} 
           queries={queries}
-          onLock={() => { setScreen('auth'); setPin(''); setRole('coordinator'); }} 
+          onLock={() => { setScreen('auth'); setPassphrase(''); setRole('coordinator'); setAuthMode('crc'); }} 
           onDLPViolation={handleDLPViolation} 
           isChecked={isChecked}
           onOpenPatient={openPatient}
+          onImportPatients={handleImportPatients}
         />
         <Toasts toasts={toasts} />
         {cmdOpen && <CmdPalette q={cmdQ} setQ={setCmdQ} onClose={() => setCmdOpen(false)} onSelect={(id: string) => { if (id === 'dashboard') setScreen('dashboard'); else openPatient(id); }} patients={patients} recentIds={recentIds} onDLPViolation={handleDLPViolation} />}
@@ -617,6 +705,7 @@ export default function App() {
           onOpenNotif={() => setNotifOpen(true)}
           onOpenHelp={() => setHelpOpen(true)}
           onOpenAddPatient={() => { setAddPatientOpen(true); setModalErr(''); }}
+          onOpenSettings={() => setScreen('settings')}
           onLock={() => { setPin(''); setScreen('auth'); }}
           onOpenPatient={openPatient}
           onDLPViolation={handleDLPViolation}
@@ -1261,18 +1350,16 @@ export default function App() {
               <div className="full-s-scr" title="Screening / Rescreening every 6 months">SCR</div>
               <div className="full-s-psb" title="Pre-Symptomatic Baseline — daily DTQ, E-RS/PGIS, WURSS-11. Up to 68 weeks.">Asymptomatic Phase (<abbr title="Pre-Symptomatic Baseline">PSB</abbr>) — up to 68 weeks</div>
               <div className="full-s-rv" title="RV Infection — 48h + 6h randomisation window">RV</div>
-              <div className="full-s-tx" title="Treatment Period — once-daily study drug, D1–D42 (EOS)">Treatment D1–D42</div>
-              <div className="full-s-fu" title="Follow-up — Day 14, 28, 42 / EOS">Follow-up</div>
-              <div className="full-s-fut" title="End of Study / future">EOS</div>
+              <div className="full-s-tx" title="Treatment Period — once-daily study drug, D1–D14">Treatment D1–D14</div>
+              <div className="full-s-fu" title="Follow-up — Day 14, 28, 42 (EOS)">Follow-up D14–D42 (EOS)</div>
             </div>
             <div className="full-tl-now" style={{ left: `${nowPct.toFixed(1)}%` }}></div>
             <div className="full-tl-labels">
-              <div className="ftl-lbl" style={{ flex: '0 0 4%' }}>W0</div>
-              <div className="ftl-lbl" style={{ flex: '0 0 45%', color: 'var(--blue)' }}>Weeks 1–68 (rescreening every 6 months · monthly calls ±5d)</div>
-              <div className="ftl-lbl" style={{ flex: '0 0 3%' }}></div>
-              <div className="ftl-lbl" style={{ flex: '0 0 12%', color: 'var(--amber)' }}>D1–D42 (EOS)</div>
-              <div className="ftl-lbl" style={{ flex: '0 0 8%', color: 'var(--green)' }}>D14/D28/D42</div>
-              <div className="ftl-lbl" style={{ flex: 1 }}></div>
+              <div className="ftl-lbl" style={{ flex: '0 0 10%' }}>W0</div>
+              <div className="ftl-lbl" style={{ flex: '0 0 60%', color: 'var(--blue)' }}>Weeks 1–68 (rescreening every 6 months · monthly calls ±5d)</div>
+              <div className="ftl-lbl" style={{ flex: '0 0 2%' }}></div>
+              <div className="ftl-lbl" style={{ flex: '0 0 12%', color: 'var(--amber)' }}>D1–D14</div>
+              <div className="ftl-lbl" style={{ flex: '0 0 16%', color: 'var(--green)' }}>D14/D28/D42 (EOS)</div>
             </div>
             <div className="tl-legend">
               <div className="tl-legend-item"><div className="tl-legend-swatch" style={{ background: 'var(--ph-scr)' }}></div>Screening</div>

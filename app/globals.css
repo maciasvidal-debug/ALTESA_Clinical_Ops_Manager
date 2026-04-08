@@ -193,12 +193,12 @@ abbr[title] { text-decoration: underline dotted var(--border2); cursor: help; te
 .mini-tl-bar { display: flex; height: 22px; border-radius: 4px; overflow: hidden; position: relative; gap: 1px; margin-top: 14px; }
 .tl-seg { height: 100%; position: relative; display: flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 700; letter-spacing: .05em; overflow: hidden; transition: filter 150ms; }
 .tl-seg:hover { filter: brightness(.92); }
-.s-scr { background: var(--ph-scr); color: #4A5568; flex: 0 0 4%; }
-.s-psb { background: var(--ph-psb); color: #1A4A8A; flex: 0 0 45%; }
-.s-rv { background: var(--ph-rv); color: #8A1A1A; flex: 0 0 3%; min-width: 8px; }
+.s-scr { background: var(--ph-scr); color: #4A5568; flex: 0 0 10%; }
+.s-psb { background: var(--ph-psb); color: #1A4A8A; flex: 0 0 60%; }
+.s-rv { background: var(--ph-rv); color: #8A1A1A; flex: 0 0 2%; min-width: 4px; }
 .s-tx { background: var(--ph-tx); color: #4A1A8A; flex: 0 0 12%; }
-.s-fu { background: var(--ph-fu); color: #1A6A45; flex: 0 0 8%; }
-.s-fut { background: var(--gray-fut); color: var(--t4); flex: 1; }
+.s-fu { background: var(--ph-fu); color: #1A6A45; flex: 0 0 16%; }
+.s-fut { display: none; }
 .tl-now-marker { position: absolute; top: -3px; bottom: -3px; width: 3px; background: var(--t1); border-radius: 2px; z-index: 10; box-shadow: 0 0 0 1px rgba(255,255,255,.8); }
 .tl-now-label { position: absolute; top: -18px; font-size: 8px; font-weight: 700; color: var(--t1); transform: translateX(-50%); white-space: nowrap; background: var(--surface); padding: 1px 4px; border-radius: 2px; border: 1px solid var(--border); font-family: var(--fm); }
 .tl-label-row { display: flex; margin-top: 3px; font-size: 8.5px; color: var(--t3); }
@@ -227,12 +227,12 @@ abbr[title] { text-decoration: underline dotted var(--border2); cursor: help; te
 .full-tl-section { background: var(--surface); border-bottom: 1px solid var(--border); padding: 20px 24px 16px; overflow-x: auto; }
 .full-tl-wrap { min-width: 620px; position: relative; padding-top: 24px; }
 .full-tl-bar { display: flex; height: 32px; border-radius: 6px; overflow: hidden; gap: 2px; }
-.full-s-scr { background: var(--ph-scr); color: #2A3A5A; font-size: 9px; font-weight: 700; letter-spacing: .06em; flex: 0 0 4%; display: flex; align-items: center; justify-content: center; }
-.full-s-psb { background: var(--ph-psb); color: #1A4A8A; font-size: 9px; font-weight: 700; letter-spacing: .06em; flex: 0 0 45%; display: flex; align-items: center; padding-left: 8px; }
-.full-s-rv { background: var(--ph-rv); color: #8A1A1A; font-size: 7px; font-weight: 700; flex: 0 0 3%; min-width: 12px; display: flex; align-items: center; justify-content: center; }
+.full-s-scr { background: var(--ph-scr); color: #2A3A5A; font-size: 9px; font-weight: 700; letter-spacing: .06em; flex: 0 0 10%; display: flex; align-items: center; justify-content: center; }
+.full-s-psb { background: var(--ph-psb); color: #1A4A8A; font-size: 9px; font-weight: 700; letter-spacing: .06em; flex: 0 0 60%; display: flex; align-items: center; padding-left: 8px; }
+.full-s-rv { background: var(--ph-rv); color: #8A1A1A; font-size: 7px; font-weight: 700; flex: 0 0 2%; min-width: 12px; display: flex; align-items: center; justify-content: center; }
 .full-s-tx { background: var(--ph-tx); color: #4A1A8A; font-size: 9px; font-weight: 700; letter-spacing: .06em; flex: 0 0 12%; display: flex; align-items: center; padding-left: 6px; }
-.full-s-fu { background: var(--ph-fu); color: #1A6A45; font-size: 9px; font-weight: 700; letter-spacing: .06em; flex: 0 0 8%; display: flex; align-items: center; padding-left: 6px; }
-.full-s-fut { background: var(--gray-fut); color: var(--t4); font-size: 9px; font-weight: 600; flex: 1; display: flex; align-items: center; padding-left: 6px; }
+.full-s-fu { background: var(--ph-fu); color: #1A6A45; font-size: 9px; font-weight: 700; letter-spacing: .06em; flex: 0 0 16%; display: flex; align-items: center; padding-left: 6px; }
+.full-s-fut { display: none; }
 .full-tl-now { position: absolute; bottom: 0; width: 3px; background: var(--t1); border-radius: 2px; top: 0; box-shadow: 0 0 0 1px rgba(255,255,255,.9); }
 .full-tl-now-lbl { position: absolute; top: 4px; font-size: 9px; font-weight: 700; color: var(--t1); transform: translateX(-50%); background: var(--surface); padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; white-space: nowrap; font-family: var(--fm); }
 .full-tl-labels { display: flex; margin-top: 6px; font-size: 9px; color: var(--t3); }

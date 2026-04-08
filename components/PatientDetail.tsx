@@ -105,22 +105,20 @@ export const PatientDetail = ({
             <div className="tl-wrap">
               <div className="tl-main">
                 <div className="tl-bar">
-                  <div className="tl-seg s-scr" style={{ flex: '0 0 4%' }}><span>SCR</span></div>
-                  <div className="tl-seg s-psb" style={{ flex: '0 0 45%' }}><span>PSB PHASE</span></div>
-                  <div className="tl-seg s-rv" style={{ flex: '0 0 3%' }}></div>
+                  <div className="tl-seg s-scr" style={{ flex: '0 0 10%' }}><span>SCR</span></div>
+                  <div className="tl-seg s-psb" style={{ flex: '0 0 60%' }}><span>ASYMPTOMATIC PHASE (PSB)</span></div>
+                  <div className="tl-seg s-rv" style={{ flex: '0 0 2%' }}></div>
                   <div className="tl-seg s-tx" style={{ flex: '0 0 12%' }}><span>TREATMENT</span></div>
-                  <div className="tl-seg s-fu" style={{ flex: '0 0 8%' }}><span>FUP</span></div>
-                  <div className="tl-seg s-fut" style={{ flex: 1 }}></div>
+                  <div className="tl-seg s-fu" style={{ flex: '0 0 16%' }}><span>FOLLOW-UP</span></div>
                   <div className="tl-now-marker" style={{ left: `${getTodayPct(patient).toFixed(1)}%` }}></div>
                   <div className="tl-now-label" style={{ left: `${getTodayPct(patient).toFixed(1)}%` }}>Today (Day {patient.studyDay})</div>
                 </div>
                 <div className="tl-labels">
-                  <div style={{ flex: '0 0 4%' }}>D-42</div>
-                  <div style={{ flex: '0 0 45%' }}>D1 (Baseline)</div>
-                  <div style={{ flex: '0 0 3%' }}>RV</div>
-                  <div style={{ flex: '0 0 12%' }}>D42</div>
-                  <div style={{ flex: '0 0 8%' }}>D90</div>
-                  <div style={{ flex: 1 }}></div>
+                  <div style={{ flex: '0 0 10%' }}>Screening</div>
+                  <div style={{ flex: '0 0 60%' }}>Weeks 1–68</div>
+                  <div style={{ flex: '0 0 2%' }}>RV</div>
+                  <div style={{ flex: '0 0 12%' }}>Day 1–14</div>
+                  <div style={{ flex: '0 0 16%' }}>Day 14–42 (EOS)</div>
                 </div>
               </div>
             </div>

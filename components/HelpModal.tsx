@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { HelpCircle, X, Home, User, AlertTriangle } from 'lucide-react';
+import { HelpCircle, X, Home, User, AlertTriangle, Shield, FileText, Key } from 'lucide-react';
 
 export function HelpModal({ onClose, initialTab = 'guide' }: { onClose: () => void, initialTab?: string }) {
   const [tab, setTab] = useState(initialTab);
@@ -16,10 +16,11 @@ export function HelpModal({ onClose, initialTab = 'guide' }: { onClose: () => vo
           <button className="ibtn" onClick={onClose}><X size={16} /></button>
         </div>
         <div className="modal-body" style={{ padding: 0 }}>
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg)', padding: '0 16px' }}>
-            <button className={`tab-btn ${tab === 'guide' ? 'active' : ''}`} onClick={() => setTab('guide')} style={{ padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `2px solid ${tab === 'guide' ? 'var(--blue)' : 'transparent'}`, fontSize: '13px', fontWeight: 600, color: tab === 'guide' ? 'var(--blue)' : 'var(--t2)', cursor: 'pointer' }}>Quick Guide</button>
-            <button className={`tab-btn ${tab === 'glossary' ? 'active' : ''}`} onClick={() => setTab('glossary')} style={{ padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `2px solid ${tab === 'glossary' ? 'var(--blue)' : 'transparent'}`, fontSize: '13px', fontWeight: 600, color: tab === 'glossary' ? 'var(--blue)' : 'var(--t2)', cursor: 'pointer' }}>Glossary</button>
-            <button className={`tab-btn ${tab === 'shortcuts' ? 'active' : ''}`} onClick={() => setTab('shortcuts')} style={{ padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `2px solid ${tab === 'shortcuts' ? 'var(--blue)' : 'transparent'}`, fontSize: '13px', fontWeight: 600, color: tab === 'shortcuts' ? 'var(--blue)' : 'var(--t2)', cursor: 'pointer' }}>Shortcuts</button>
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg)', padding: '0 16px', overflowX: 'auto' }}>
+            <button className={`tab-btn ${tab === 'guide' ? 'active' : ''}`} onClick={() => setTab('guide')} style={{ padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `2px solid ${tab === 'guide' ? 'var(--blue)' : 'transparent'}`, fontSize: '13px', fontWeight: 600, color: tab === 'guide' ? 'var(--blue)' : 'var(--t2)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Quick Guide</button>
+            <button className={`tab-btn ${tab === 'security' ? 'active' : ''}`} onClick={() => setTab('security')} style={{ padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `2px solid ${tab === 'security' ? 'var(--blue)' : 'transparent'}`, fontSize: '13px', fontWeight: 600, color: tab === 'security' ? 'var(--blue)' : 'var(--t2)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Security & Sync</button>
+            <button className={`tab-btn ${tab === 'glossary' ? 'active' : ''}`} onClick={() => setTab('glossary')} style={{ padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `2px solid ${tab === 'glossary' ? 'var(--blue)' : 'transparent'}`, fontSize: '13px', fontWeight: 600, color: tab === 'glossary' ? 'var(--blue)' : 'var(--t2)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Glossary</button>
+            <button className={`tab-btn ${tab === 'shortcuts' ? 'active' : ''}`} onClick={() => setTab('shortcuts')} style={{ padding: '12px 16px', background: 'transparent', border: 'none', borderBottom: `2px solid ${tab === 'shortcuts' ? 'var(--blue)' : 'transparent'}`, fontSize: '13px', fontWeight: 600, color: tab === 'shortcuts' ? 'var(--blue)' : 'var(--t2)', cursor: 'pointer', whiteSpace: 'nowrap' }}>Shortcuts</button>
           </div>
           <div style={{ padding: '24px', maxHeight: '60vh', overflowY: 'auto', fontSize: '13px', lineHeight: '1.6', color: 'var(--t2)' }}>
             {tab === 'guide' && (
@@ -45,6 +46,27 @@ export function HelpModal({ onClose, initialTab = 'guide' }: { onClose: () => vo
                 <div style={{ marginBottom: '24px' }}>
                   <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--t1)', display: 'flex', alignItems: 'center', gap: '6px' }}><AlertTriangle size={14} /> 3. The RV Protocol (Positive DTQ)</h4>
                   <p style={{ margin: 0 }}>If a patient reports new symptoms (DTQ task), the system will ask if the result is Positive or Negative. A <strong>Positive</strong> result triggers the RV Protocol Wizard, which will guide you through the critical steps before randomisation.</p>
+                </div>
+              </div>
+            )}
+            {tab === 'security' && (
+              <div>
+                <h3 style={{ marginTop: 0, marginBottom: '16px', fontSize: '16px', color: 'var(--t1)' }}>Offline Security & Data Sync Workflow</h3>
+                <p style={{ marginBottom: '16px' }}>ALTESA uses a military-grade, offline-first security architecture. Data is never sent to a central server. Instead, it is transferred securely between Coordinators and Managers using encrypted packages.</p>
+                
+                <div style={{ marginBottom: '20px', padding: '16px', background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--t1)', display: 'flex', alignItems: 'center', gap: '6px' }}><Key size={14} color="#F59E0B" /> 1. Manager Key Exchange</h4>
+                  <p style={{ margin: 0 }}>Before data can be shared, the Manager must export their <strong>Public Key</strong> from their dashboard and share it with the Coordinator. The Coordinator imports this key in the <strong>Settings</strong> menu.</p>
+                </div>
+
+                <div style={{ marginBottom: '20px', padding: '16px', background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--t1)', display: 'flex', alignItems: 'center', gap: '6px' }}><Shield size={14} color="#3B82F6" /> 2. Exporting Data (Coordinator)</h4>
+                  <p style={{ margin: 0 }}>In <strong>Settings</strong>, the Coordinator clicks <strong>Download Data Package</strong>. The system automatically filters PII (emails, phones, SSN) and encrypts the data using AES-256-GCM and the Manager's Public Key. It also signs the package to prevent tampering.</p>
+                </div>
+
+                <div style={{ marginBottom: '20px', padding: '16px', background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--t1)', display: 'flex', alignItems: 'center', gap: '6px' }}><FileText size={14} color="#10B981" /> 3. Importing Data (Manager)</h4>
+                  <p style={{ margin: 0 }}>The Manager receives the <code>.enc</code> file and uses the <strong>Data Sync</strong> button in their dashboard to import it. The system verifies the signature and decrypts the payload locally.</p>
                 </div>
               </div>
             )}
