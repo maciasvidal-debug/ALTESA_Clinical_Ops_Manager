@@ -2,10 +2,13 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+const rootDir = path.join(__dirname, '..');
+
 console.log('Building Next.js application for export...');
 try {
   execSync('npx next build', {
     stdio: 'inherit',
+    cwd: rootDir,
     env: { ...process.env, BUILD_DEMO: 'true' }
   });
 } catch (error) {
@@ -13,7 +16,7 @@ try {
   process.exit(1);
 }
 
-const outDir = path.join(process.cwd(), 'out');
+const outDir = path.join(rootDir, 'out');
 if (!fs.existsSync(outDir)) {
   console.error("No 'out' directory found after build.");
   process.exit(1);
@@ -90,6 +93,6 @@ if (html.includes('</body>')) {
   html += scriptsToAppend;
 }
 
-const outputPath = path.join(process.cwd(), 'demo.html');
+const outputPath = path.join(rootDir, 'demo.html');
 fs.writeFileSync(outputPath, html);
 console.log(`Successfully created standalone demo at: ${outputPath}`);
