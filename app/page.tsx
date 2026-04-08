@@ -11,7 +11,7 @@ import {
   Check, ArrowRight, Delete, X, Info, User, Globe, Mail, Hospital, Clock,
   HelpCircle, Phone, Activity, ChevronRight, ArrowUp, ArrowDown, Link,
   ChevronDown, Plus, FileEdit, ArrowLeft, Circle, FileText, BarChart2,
-  CheckCircle2, Calendar, Flag, Microscope, Home, Wind, Pill
+  CheckCircle2, Calendar, Flag, Microscope, Home, Wind, Pill, MessageSquare
 } from 'lucide-react';
 
 // Components
@@ -27,6 +27,7 @@ import { Sparkline } from '@/components/Sparkline';
 import { AddPatientModal } from '@/components/AddPatientModal';
 import { EditPatientModal } from '@/components/EditPatientModal';
 import { NotificationCenter } from '@/components/NotificationCenter';
+import { ManagerDashboard } from '@/components/ManagerDashboard';
 import { Toasts } from '@/components/Toasts';
 import { Wizard } from '@/components/Wizard';
 import { RescreeningWizard } from '@/components/RescreeningWizard';
@@ -47,7 +48,8 @@ export default function App() {
   const [patients, setPatients] = useState<Patient[]>(() => 
     PATIENTS.map(p => ({ ...p, studyDay: diffDays(p.screeningDate, TODAY) }))
   );
-  const [screen, setScreen] = useState<'auth' | 'dashboard' | 'patient'>('auth');
+  const [screen, setScreen] = useState<'auth' | 'dashboard' | 'patient' | 'manager_dashboard'>('auth');
+  const [role, setRole] = useState<'coordinator' | 'manager'>('coordinator');
   const [pin, setPin] = useState('');
   const [pinErr, setPinErr] = useState('');
   const [selPatientId, setSelPatientId] = useState<string | null>(null);
@@ -92,6 +94,15 @@ export default function App() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
+
+  // Manager State
+  const [reviewedTasks, setReviewedTasks] = useState<Set<string>>(new Set());
+  const [queries, setQueries] = useState<any[]>([
+    { id: 'QRY-1001', pid: 'ALTESA-002', taskCode: 'SPI', issue: 'Missing Spirometry Post-BD data', status: 'open' },
+    { id: 'QRY-1002', pid: 'ALTESA-047', taskCode: 'LAB', issue: 'Lab results not uploaded', status: 'answered' }
+  ]);
+  const [queryModalOpen, setQueryModalOpen] = useState(false);
+  const [queryDraft, setQueryDraft] = useState({ pid: '', taskCode: '', issue: '' });
 
   const [editPatientOpen, setEditPatientOpen] = useState(false);
   const [editPatientData, setEditPatientData] = useState<{name: string, lang: string, loc: string} | null>(null);
@@ -151,6 +162,38 @@ export default function App() {
     console.log(`[EMAIL SIMULATION] To: coordinator@example.com | Subject: ${notif.title} | Body: ${notif.message}`);
     // In a real app, this would call an API route that uses SendGrid/Nodemailer
   }, [emailEnabled]);
+
+  const toggleReview = (pid: string, code: string) => {
+    const key = `${pid}-${code}`;
+    setReviewedTasks(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    showToast(`Task ${code} marked as reviewed`, 'ok');
+  };
+
+  const handleOpenQuery = (pid: string, code: string) => {
+    setQueryDraft({ pid, taskCode: code, issue: '' });
+    setQueryModalOpen(true);
+  };
+
+  const submitQuery = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!queryDraft.issue.trim()) return;
+    
+    setQueries(prev => [{
+      id: `QRY-${1000 + prev.length + 1}`,
+      pid: queryDraft.pid,
+      taskCode: queryDraft.taskCode,
+      issue: queryDraft.issue,
+      status: 'open'
+    }, ...prev]);
+    
+    setQueryModalOpen(false);
+    showToast('Query opened successfully', 'ok');
+  };
 
   const isChecked = useCallback((pid: string, code: string) => {
     const p = patients.find(x => x.id === pid);
@@ -251,7 +294,13 @@ export default function App() {
   }, [screen]);
 
   const handleLoginSuccess = () => {
-    setScreen('dashboard');
+    if (pin === '9999' || pin === '999999' || pin === '99999999') {
+      setRole('manager');
+      setScreen('manager_dashboard');
+    } else {
+      setRole('coordinator');
+      setScreen('dashboard');
+    }
     if (typeof window !== 'undefined' && !localStorage.getItem('altesa_briefed_today')) {
       setBriefingOpen(true);
       localStorage.setItem('altesa_briefed_today', fmtISO(TODAY));
@@ -533,6 +582,24 @@ export default function App() {
           </div>
         </div>
       </div>
+    );
+  }
+
+  // Manager Dashboard Screen
+  if (screen === 'manager_dashboard') {
+    return (
+      <>
+        <ManagerDashboard 
+          patients={patients} 
+          queries={queries}
+          onLock={() => { setScreen('auth'); setPin(''); setRole('coordinator'); }} 
+          onDLPViolation={handleDLPViolation} 
+          isChecked={isChecked}
+          onOpenPatient={openPatient}
+        />
+        <Toasts toasts={toasts} />
+        {cmdOpen && <CmdPalette q={cmdQ} setQ={setCmdQ} onClose={() => setCmdOpen(false)} onSelect={(id: string) => { if (id === 'dashboard') setScreen('dashboard'); else openPatient(id); }} patients={patients} recentIds={recentIds} onDLPViolation={handleDLPViolation} />}
+      </>
     );
   }
 
@@ -895,11 +962,11 @@ export default function App() {
                 return (
                   <div key={t.code} data-code={t.code} className={`a-item ${rowClass} ${blocked ? 'is-blocked' : ''} ${highlightClass} ${dimmedClass}`}
                        tabIndex={0} role="checkbox" aria-checked={chk} aria-label={t.label}
-                       onClick={() => toggleCheck(p.id, t)}
+                       onClick={() => role === 'coordinator' && toggleCheck(p.id, t)}
                        onMouseEnter={() => setHoveredTask(t.code)}
                        onMouseLeave={() => setHoveredTask(null)}
-                       onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleCheck(p.id, t); } }}
-                       style={{ cursor: blocked ? 'not-allowed' : 'pointer', position: 'relative' }}>
+                       onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); role === 'coordinator' && toggleCheck(p.id, t); } }}
+                       style={{ cursor: blocked ? 'not-allowed' : role === 'manager' ? 'default' : 'pointer', position: 'relative' }}>
                     
                     {(isPrereq || isDependent) && (
                       <div className="dep-connector" style={{ 
@@ -1035,19 +1102,49 @@ export default function App() {
                       </div>
                     </div>
                     <div className="a-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <button 
-                        className="ibtn" 
-                        style={{ padding: '6px', minHeight: '32px', border: 'none', background: 'transparent' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDateError(null);
-                          setEditTask({ pid: p.id, task: { ...t } });
-                        }}
-                        title="Edit task details"
-                      >
-                        <FileEdit size={14} color="var(--t3)" />
-                      </button>
-                      <div className={`chkbox ${chk ? 'checked' : ''}`}></div>
+                      {role === 'coordinator' ? (
+                        <>
+                          <button 
+                            className="ibtn" 
+                            style={{ padding: '6px', minHeight: '32px', border: 'none', background: 'transparent' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDateError(null);
+                              setEditTask({ pid: p.id, task: { ...t } });
+                            }}
+                            title="Edit task details"
+                          >
+                            <FileEdit size={14} color="var(--t3)" />
+                          </button>
+                          <div className={`chkbox ${chk ? 'checked' : ''}`}></div>
+                        </>
+                      ) : (
+                        <>
+                          <button 
+                            className="ibtn" 
+                            style={{ padding: '6px', minHeight: '32px', border: 'none', background: 'transparent' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleReview(p.id, t.code);
+                            }}
+                            title="Mark as Reviewed"
+                          >
+                            <CheckCircle2 size={14} color={reviewedTasks.has(`${p.id}-${t.code}`) ? 'var(--green)' : 'var(--t3)'} />
+                          </button>
+                          <button 
+                            className="ibtn" 
+                            style={{ padding: '6px', minHeight: '32px', border: 'none', background: 'transparent' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenQuery(p.id, t.code);
+                            }}
+                            title="Open Query"
+                          >
+                            <MessageSquare size={14} color={queries.some(q => q.pid === p.id && q.taskCode === t.code && q.status === 'open') ? 'var(--amber)' : 'var(--t3)'} />
+                          </button>
+                          <div className={`chkbox ${chk ? 'checked' : ''}`} style={{ opacity: 0.5, cursor: 'default' }}></div>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
@@ -1084,7 +1181,9 @@ export default function App() {
         <div className="crit-banner">
           <div className="crit-pulse"></div>
           <div className="crit-text"><strong>RV Protocol Active</strong> — DTQ Positive · 48h + 6h window running</div>
-          <button className="crit-action" onClick={() => { setCdStart(Date.now() - 3 * 3600000); setWzOpen(true); }}>Open Wizard <ArrowRight size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/></button>
+          {role === 'coordinator' && (
+            <button className="crit-action" onClick={() => { setCdStart(Date.now() - 3 * 3600000); setWzOpen(true); }}>Open Wizard <ArrowRight size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/></button>
+          )}
         </div>
       )}
       {p.alert === 'MONTHLY_CALL' && (
@@ -1096,39 +1195,43 @@ export default function App() {
           <div style={{ flex: 1 }}>
             <strong>Rescreening Window Open</strong> — Patient is nearing the Week {getRescreeningStatus(p)?.milestone} re-evaluation milestone ({getRescreeningStatus(p)?.days} days remaining).
           </div>
-          <button 
-            className="btn btn-primary" 
-            style={{ padding: '4px 12px', fontSize: '11px', background: 'var(--amber)', borderColor: 'var(--amber)', color: '#fff' }}
-            onClick={() => {
-              setRescreeningData(p);
-              setRescreeningOpen(true);
-              setRescreeningStep(1);
-            }}
-          >
-            Start Rescreening Workflow
-          </button>
+          {role === 'coordinator' && (
+            <button 
+              className="btn btn-primary" 
+              style={{ padding: '4px 12px', fontSize: '11px', background: 'var(--amber)', borderColor: 'var(--amber)', color: '#fff' }}
+              onClick={() => {
+                setRescreeningData(p);
+                setRescreeningOpen(true);
+                setRescreeningStep(1);
+              }}
+            >
+              Start Rescreening Workflow
+            </button>
+          )}
         </div>
       )}
       <div className="pv-wrap">
         <div className="pv-topbar">
-          <button className="back-btn" onClick={() => setScreen('dashboard')}><ArrowLeft size={14} /> Dashboard</button>
+          <button className="back-btn" onClick={() => setScreen(role === 'manager' ? 'manager_dashboard' : 'dashboard')}><ArrowLeft size={14} /> Back</button>
           <div className="pv-id-block">
             <div className="pv-id">
               <DLPWrapper onViolation={handleDLPViolation}>{p.id}</DLPWrapper> 
               <span style={{color:'var(--t3)', fontWeight:400, fontSize:'16px', marginLeft:'8px'}}>
                 <DLPWrapper onViolation={handleDLPViolation}>{p.name}</DLPWrapper>
               </span>
-              <button 
-                className="ibtn" 
-                style={{ marginLeft: '12px', padding: '4px 8px', minHeight: '28px', fontSize: '11px', display: 'inline-flex' }}
-                onClick={() => {
-                  setEditPatientData({ name: p.name, lang: p.lang, loc: p.loc });
-                  setEditPatientOpen(true);
-                  setModalErr('');
-                }}
-              >
-                <FileEdit size={12} /> Edit
-              </button>
+              {role === 'coordinator' && (
+                <button 
+                  className="ibtn" 
+                  style={{ marginLeft: '12px', padding: '4px 8px', minHeight: '28px', fontSize: '11px', display: 'inline-flex' }}
+                  onClick={() => {
+                    setEditPatientData({ name: p.name, lang: p.lang, loc: p.loc });
+                    setEditPatientOpen(true);
+                    setModalErr('');
+                  }}
+                >
+                  <FileEdit size={12} /> Edit
+                </button>
+              )}
             </div>
             <div className="pv-id-sub">
               <span className={`phase-badge ${phBadge}`}>{p.phaseLabel}</span>
@@ -1670,6 +1773,40 @@ export default function App() {
           onClose={() => { setHelpOpen(false); setShowWelcome(false); }} 
           initialTab={showWelcome ? 'guide' : 'guide'} 
         />
+      )}
+
+      {queryModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 800 }}>
+          <div className="modal-card" style={{ maxWidth: '400px' }}>
+            <div className="modal-hdr">
+              <div className="modal-title">Open Query</div>
+              <button className="ibtn" onClick={() => setQueryModalOpen(false)}><X size={16} /></button>
+            </div>
+            <form onSubmit={submitQuery}>
+              <div className="modal-body">
+                <div style={{ marginBottom: '16px', fontSize: '12px', color: 'var(--t2)' }}>
+                  Opening a query for task <strong>{queryDraft.taskCode}</strong> on patient <strong><DLPWrapper onViolation={handleDLPViolation}>{queryDraft.pid}</DLPWrapper></strong>.
+                </div>
+                <div>
+                  <label className="modal-label">Issue Description</label>
+                  <textarea 
+                    autoFocus
+                    className="modal-input" 
+                    rows={4}
+                    value={queryDraft.issue}
+                    onChange={e => setQueryDraft({ ...queryDraft, issue: e.target.value })}
+                    placeholder="Describe the issue or missing information..."
+                    required
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="ibtn" onClick={() => setQueryModalOpen(false)}>Cancel</button>
+                <button type="submit" className="ibtn" style={{ background: 'var(--amber)', color: '#fff', border: 'none', fontWeight: 600 }}>Submit Query</button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       <Toasts toasts={toasts} />
