@@ -1,5 +1,7 @@
 node_modules/
 .next/
+out/
+demo.html
 coverage/
 .DS_Store
 *.log
