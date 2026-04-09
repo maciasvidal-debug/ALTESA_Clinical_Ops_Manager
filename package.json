@@ -7,8 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "clean": "next clean",
-    "build:demo": "node scripts/build-demo.js"
+    "clean": "next clean"
   },
   "dependencies": {
     "@google/genai": "^1.17.0",

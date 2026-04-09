@@ -1,0 +1,1 @@
+Hello user! Since we decided to use Vercel, I reverted all the experimental single-file HTML code and left your project exactly as you had it (clean Next.js). There is nothing left to commit, so you are ready to connect this repo directly to Vercel/Render.
