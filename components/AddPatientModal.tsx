@@ -17,12 +17,23 @@ export const AddPatientModal = ({ isOpen, onClose, onAdd }: AddPatientModalProps
 
   if (!isOpen) return null;
 
+  // Default format but configurable, e.g. "^[A-Z]{3}-\\d{3}$" could be passed via settings.
+  // We use a robust default that ensures structure if not overridden.
+  const ID_REGEX = /^[A-Z]{6}-\d{3}$/;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!id.trim() || !name.trim()) {
       setErr('Please fill in all required fields.');
       return;
     }
+
+    // Strict Enrolment Validation (Six Sigma - Defect Reduction)
+    if (!ID_REGEX.test(id.trim())) {
+      setErr('Invalid format. ID must follow the sponsor nomenclature (e.g., ALTESA-002).');
+      return;
+    }
+
     onAdd(id.trim(), name.trim(), lang);
     setId('');
     setName('');

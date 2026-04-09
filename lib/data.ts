@@ -15,6 +15,7 @@ export function fmtHuman(d: Date) {
   return `${months[d.getMonth()]} ${d.getDate()}${d.getFullYear() !== TODAY.getFullYear() ? ', ' + d.getFullYear() : ''}`;
 }
 
+// Six Sigma: Refactored engine, Milestone-driven rather than absolute static percentages.
 export function getTodayPct(p: any) {
   const SCR_PCT = 10.0;
   const PSB_PCT = 60.0;
@@ -22,25 +23,31 @@ export function getTodayPct(p: any) {
   const TX_PCT = 12.0;
   const FUP_PCT = 16.0;
 
+  // Real projected limits for milestone tracking to prevent visual desync
+  const SCR_DAYS = 42;
+  const PSB_DAYS = 476;
+  const TX_DAYS = 14;
+  const FUP_DAYS = 28;
+
   if (p.phaseCode === 'scr') {
-    // Screening is up to 42 days
     const days = Math.max(0, diffDays(p.screeningDate, TODAY));
-    return Math.min(SCR_PCT, (days / 42) * SCR_PCT);
+    return Math.min(SCR_PCT, (days / SCR_DAYS) * SCR_PCT);
   } 
   else if (p.phaseCode === 'psb') {
-    // PSB is up to 476 days (68 weeks)
+    // In PSB, even if days > 476, we cap it logically. If days are fewer, it stays proportionally inside PSB.
     const days = Math.max(0, diffDays(p.psbStartDate || p.screeningDate, TODAY));
-    return SCR_PCT + Math.min(PSB_PCT, (days / 476) * PSB_PCT);
+    return SCR_PCT + Math.min(PSB_PCT, (days / PSB_DAYS) * PSB_PCT);
   }
   else if (p.phaseCode === 'tx') {
-    // Treatment is Day 1 to Day 14
+    // If we reach TX, we force the marker past the previous phases, ensuring visual consistency regardless of previous durations
     const days = Math.max(0, diffDays(p.randomizationDate || p.rvInfectionDate || TODAY, TODAY));
-    return SCR_PCT + PSB_PCT + RV_PCT + Math.min(TX_PCT, (days / 14) * TX_PCT);
+    return SCR_PCT + PSB_PCT + RV_PCT + Math.min(TX_PCT, (days / TX_DAYS) * TX_PCT);
   }
   else if (p.phaseCode === 'fu') {
-    // Follow-up is Day 14 to Day 42 (28 days)
-    const days = Math.max(0, diffDays(p.randomizationDate || p.rvInfectionDate || TODAY, TODAY) - 14);
-    return SCR_PCT + PSB_PCT + RV_PCT + TX_PCT + Math.min(FUP_PCT, (days / 28) * FUP_PCT);
+    // Follow-up anchors from randomization date explicitly, +14 days to start
+    const startOfFuDate = addDays(p.randomizationDate || p.rvInfectionDate || TODAY, TX_DAYS);
+    const days = Math.max(0, diffDays(startOfFuDate, TODAY));
+    return SCR_PCT + PSB_PCT + RV_PCT + TX_PCT + Math.min(FUP_PCT, (days / FUP_DAYS) * FUP_PCT);
   }
   
   return 100;

@@ -7,6 +7,7 @@ import {
   ChevronRight, ClipboardList, User, Settings as SettingsIcon,
   LayoutGrid, List, Calendar as CalendarIcon
 } from 'lucide-react';
+import { Virtuoso } from 'react-virtuoso';
 import { 
   type Patient, type Notification, 
   fmtHuman, fmtISO, getTodayPct, countTasks, TODAY 
@@ -201,19 +202,20 @@ export const Dashboard = ({
 
         {viewMode === 'list' && (
           <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-              <thead>
-                <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', textAlign: 'left', color: '#64748B' }}>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Patient ID</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Name</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Phase</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Location</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Tasks</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visible.length > 0 ? visible.map(p => {
+            <div style={{ display: 'flex', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '13px' }}>
+              <div style={{ padding: '12px 16px', fontWeight: 600, flex: 2 }}>Patient ID</div>
+              <div style={{ padding: '12px 16px', fontWeight: 600, flex: 3 }}>Name</div>
+              <div style={{ padding: '12px 16px', fontWeight: 600, flex: 2 }}>Phase</div>
+              <div style={{ padding: '12px 16px', fontWeight: 600, flex: 2 }}>Location</div>
+              <div style={{ padding: '12px 16px', fontWeight: 600, flex: 2 }}>Tasks</div>
+              <div style={{ padding: '12px 16px', fontWeight: 600, flex: 2 }}>Status</div>
+            </div>
+            {visible.length > 0 ? (
+              <Virtuoso
+                style={{ height: Math.min(visible.length * 53, 500), width: '100%' }}
+                totalCount={visible.length}
+                itemContent={(index) => {
+                  const p = visible[index];
                   const { done, total } = countTasks(p);
                   const isCrit = p.alert === 'DTQ_POSITIVE';
                   const isWarn = p.alert && !isCrit;
@@ -222,32 +224,36 @@ export const Dashboard = ({
                   const phBadge = { scr: 'pb-scr', psb: 'pb-psb', tx: 'pb-tx', fu: 'pb-fu' }[p.phaseCode] || 'pb-psb';
                   
                   return (
-                    <tr key={p.id} 
-                      style={{ borderBottom: '1px solid #E2E8F0', cursor: 'pointer', background: isCrit ? '#FEF2F2' : isWarn ? '#FFFBEB' : '#fff' }}
+                    <div
+                      key={p.id}
+                      style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #E2E8F0', cursor: 'pointer', background: isCrit ? '#FEF2F2' : isWarn ? '#FFFBEB' : '#fff', minHeight: '53px' }}
                       onClick={() => onOpenPatient(p.id)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenPatient(p.id); } }}
+                      tabIndex={0}
+                      role="row"
                     >
-                      <td style={{ padding: '12px 16px', fontWeight: 600, color: '#0F172A' }}><DLPWrapper onViolation={onDLPViolation}>{p.id}</DLPWrapper></td>
-                      <td style={{ padding: '12px 16px', color: '#475569' }}><DLPWrapper onViolation={onDLPViolation}>{p.name}</DLPWrapper></td>
-                      <td style={{ padding: '12px 16px' }}><span className={`phase-badge ${phBadge}`} style={{ padding: '2px 8px', fontSize: '11px' }}>{p.phaseLabel.split('·')[0].trim()}</span></td>
-                      <td style={{ padding: '12px 16px', color: '#475569' }}>{p.loc.includes('CLINIC') ? '🏥' : '🏠'} {p.loc}</td>
-                      <td style={{ padding: '12px 16px' }}>
+                      <div style={{ padding: '12px 16px', fontWeight: 600, color: '#0F172A', flex: 2 }}><DLPWrapper onViolation={onDLPViolation}>{p.id}</DLPWrapper></div>
+                      <div style={{ padding: '12px 16px', color: '#475569', flex: 3 }}><DLPWrapper onViolation={onDLPViolation}>{p.name}</DLPWrapper></div>
+                      <div style={{ padding: '12px 16px', flex: 2 }}><span className={`phase-badge ${phBadge}`} style={{ padding: '2px 8px', fontSize: '11px' }}>{p.phaseLabel.split('·')[0].trim()}</span></div>
+                      <div style={{ padding: '12px 16px', color: '#475569', flex: 2 }}>{p.loc.includes('CLINIC') ? '🏥' : '🏠'} {p.loc}</div>
+                      <div style={{ padding: '12px 16px', flex: 2 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <div style={{ width: '60px', height: '6px', background: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
                             <div style={{ height: '100%', background: done === total && total > 0 ? '#10B981' : '#3B82F6', width: `${total > 0 ? (done / total) * 100 : 0}%` }}></div>
                           </div>
                           <span style={{ fontSize: '12px', color: '#64748B' }}>{done}/{total}</span>
                         </div>
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
+                      </div>
+                      <div style={{ padding: '12px 16px', flex: 2 }}>
                         <div className={`urg-badge ${urgClass}`} style={{ display: 'inline-flex', padding: '4px 8px' }}>{urgText}</div>
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   );
-                }) : (
-                  <tr><td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>No patients match the current filter.</td></tr>
-                )}
-              </tbody>
-            </table>
+                }}
+              />
+            ) : (
+              <div style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>No patients found.</div>
+            )}
           </div>
         )}
 
