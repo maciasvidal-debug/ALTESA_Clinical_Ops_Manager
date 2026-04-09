@@ -61,7 +61,7 @@ export function HelpModal({ onClose, initialTab = 'guide' }: { onClose: () => vo
 
                 <div style={{ marginBottom: '20px', padding: '16px', background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)' }}>
                   <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--t1)', display: 'flex', alignItems: 'center', gap: '6px' }}><Shield size={14} color="#3B82F6" /> 2. Exporting Data (Coordinator)</h4>
-                  <p style={{ margin: 0 }}>In <strong>Settings</strong>, the Coordinator clicks <strong>Download Data Package</strong>. The system automatically filters PII (emails, phones, SSN) and encrypts the data using AES-256-GCM and the Manager's Public Key. It also signs the package to prevent tampering.</p>
+                  <p style={{ margin: 0 }}>In <strong>Settings</strong>, the Coordinator clicks <strong>Download Data Package</strong>. The system automatically filters PII (emails, phones, SSN) and encrypts the data using AES-256-GCM and the Manager&apos;s Public Key. It also signs the package to prevent tampering.</p>
                 </div>
 
                 <div style={{ marginBottom: '20px', padding: '16px', background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)' }}>

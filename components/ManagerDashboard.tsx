@@ -236,7 +236,7 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
             <div style={{ fontSize: '32px', fontWeight: 700, color: kpis.overdues > 0 ? '#EF4444' : '#10B981' }}>{kpis.overdues}</div>
           </div>
           <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 500, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Calendar size={16} color="#F59E0B" /> Today's Assessments</div>
+            <div style={{ fontSize: '13px', color: '#64748B', fontWeight: 500, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><Calendar size={16} color="#F59E0B" /> Today&apos;s Assessments</div>
             <div style={{ fontSize: '32px', fontWeight: 700, color: '#0F172A' }}>{kpis.todays}</div>
           </div>
           <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
