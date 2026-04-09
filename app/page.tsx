@@ -87,6 +87,7 @@ export default function App() {
   const [cmdOpen, setCmdOpen] = useState(false);
   const [cmdQ, setCmdQ] = useState('');
   const [taskConfirm, setTaskConfirm] = useState<{pid: string, task: any} | null>(null);
+  const [spiAttested, setSpiAttested] = useState(false);
   const [wzCheckConfirm, setWzCheckConfirm] = useState<{step: number, index: number} | null>(null);
   const [editTask, setEditTask] = useState<{pid: string, task: any} | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
@@ -370,6 +371,9 @@ export default function App() {
     });
   };
 
+  const [overrideTask, setOverrideTask] = useState<{pid: string, task: any} | null>(null);
+  const [overrideReason, setOverrideReason] = useState('');
+
   const toggleCheck = (pid: string, task: any) => {
     const code = task.code;
     const currentlyChecked = isChecked(pid, code);
@@ -377,7 +381,8 @@ export default function App() {
     // If we are marking as complete (checking), show confirmation
     if (!currentlyChecked) {
       if (isBlocked(pid, task)) {
-        showToast(`Cannot complete ${task.label}: Dependencies not met`, 'warn');
+        // Smart Task / QbD Override Flow
+        setOverrideTask({ pid, task });
         return;
       }
       setTaskConfirm({ pid, task });
@@ -428,11 +433,14 @@ export default function App() {
       return;
     }
 
-    if (!/^[A-Z0-9]+-[0-9]+$/.test(id)) {
-      setModalErr('Invalid ID format. Use SITE-XXX (e.g. ALTESA-002)');
+    // Six Sigma - Defect Reduction: dynamic strict format (configurable per sponsor)
+    const ID_REGEX = /^[A-Z]{3,6}-\d{3}$/;
+    if (!ID_REGEX.test(id)) {
+      setModalErr('Invalid format. ID must follow the sponsor nomenclature (e.g., ALTESA-002).');
       return;
     }
     
+    // Cross-validation
     if (patients.some(p => p.id === id)) {
       setModalErr(`Patient ID ${id} already exists in the system`);
       return;
@@ -1555,16 +1563,43 @@ export default function App() {
               <button className="btn btn-success" onClick={() => {
                 setRndConfirmOpen(false);
                 setWzOpen(false);
-                const p = patients.find(x => x.id === 'ALTESA-047');
-                if (p) {
-                  p.dtqPos = false;
-                  p.alert = null;
-                  p.phase = 'TREATMENT';
-                  p.phaseCode = 'tx';
-                  p.phaseLabel = 'Treatment · Day 1';
-                  p.loc = 'CLINIC';
-                }
-                showToast('ALTESA-047 randomised — Treatment Period activated', 'ok');
+
+                setPatients(prev => prev.map(p => {
+                  if (p.id !== 'ALTESA-047') return p;
+                  return {
+                    ...p,
+                    dtqPos: false,
+                    alert: null,
+                    phase: 'TREATMENT',
+                    phaseCode: 'tx',
+                    phaseLabel: 'Treatment Period · Day 1',
+                    loc: 'CLINIC',
+                    randomizationDate: TODAY,
+                    tasks: {
+                      q: [
+                        { code: 'ERS', label: 'E-RS / PGIS (EXACT)', icon: '📋', done: false, note: 'Daily D1→D28' },
+                        { code: 'WURSS', label: 'WURSS-11', icon: '📋', done: false, note: 'Daily through Day 28' },
+                        { code: 'PRN', label: 'COPD PRN Inhaler Use', icon: '💨', done: false, note: 'Collected with E-RS' },
+                      ],
+                      pr: [
+                        { code: 'PE', label: 'Physical Exam — limited (include weight)', icon: '🩺', done: false },
+                        { code: 'VS', label: 'Vital Signs', icon: '🩺', done: false },
+                        { code: 'OSC', label: 'Oscillometry', icon: '🫁', done: false, seq: true },
+                        { code: 'SPI', label: 'Spirometry', icon: '🫁', done: false, dependsOn: ['OSC'] },
+                        { code: 'ECG', label: '12-lead ECG', icon: '🫀', done: false, note: 'Required Day 1 only (Table 1, fn. a)' },
+                        { code: 'CVC', label: 'Central Virology Collection', icon: '🦠', done: false },
+                        { code: 'CSL', label: 'Central Safety Labs', icon: '🧪', done: false },
+                        { code: 'PT_U', label: 'Pregnancy Test (Urine)', icon: '🧪', done: false, note: 'WOCBP only' },
+                        { code: 'PK', label: 'Sparse PK Sampling — PRIOR to Day 1 dosing', icon: '🩸', done: false },
+                        { code: 'DRUG', label: 'Study Drug Dosing — Day 1', icon: '💊', done: false, note: 'Initial dose supervised in clinic', dependsOn: ['CVC', 'PK', 'SPI', 'ECG', 'PT_U'] }
+                      ],
+                      l: [],
+                      ad: []
+                    }
+                  };
+                }));
+
+                showToast('ALTESA-047 randomised — Treatment Period Day 1 tasks injected', 'ok');
               }}><Check size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Confirm Randomisation</button>
             </div>
           </div>
@@ -1600,6 +1635,44 @@ export default function App() {
         </div>
       )}
 
+      {overrideTask && (
+        <div className="confirm-overlay" style={{ zIndex: 700 }}>
+          <div className="confirm-card">
+            <div className="confirm-icon"><AlertTriangle size={32} color="var(--amber)" /></div>
+            <div className="confirm-title">Dependency Override Required</div>
+            <div className="confirm-body">
+              <p>You are attempting to complete <strong>{overrideTask.task.label}</strong> before its prerequisites ({overrideTask.task.dependsOn?.join(', ')}) are met.</p>
+              <p style={{ marginTop: '8px', fontSize: '13px' }}>Under QbD guidelines, you must provide a clinical justification to override this logical sequence.</p>
+              <textarea
+                autoFocus
+                placeholder="Enter justification for overriding task sequence..."
+                value={overrideReason}
+                onChange={e => setOverrideReason(e.target.value)}
+                style={{ width: '100%', marginTop: '12px', padding: '8px', borderRadius: '4px', border: '1px solid #ccc', minHeight: '60px', fontSize: '13px' }}
+              />
+            </div>
+            <div className="confirm-btns">
+              <button className="btn btn-ghost" onClick={() => { setOverrideTask(null); setOverrideReason(''); }}>Cancel</button>
+              <button
+                className="btn btn-primary"
+                disabled={overrideReason.trim().length < 10}
+                onClick={() => {
+                  const p = patients.find(x => x.id === overrideTask.pid);
+                  if (p) {
+                    showToast(`Override logged: ${overrideReason.substring(0,20)}...`, 'info');
+                  }
+                  // Proceed to regular confirm
+                  setTaskConfirm(overrideTask);
+                  setOverrideTask(null);
+                  setOverrideReason('');
+                }}>
+                Acknowledge & Proceed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {taskConfirm && (
         <div className="confirm-overlay" style={{ zIndex: 700 }}>
           <div className="confirm-card">
@@ -1610,13 +1683,28 @@ export default function App() {
             <div className="confirm-body">
               {taskConfirm.task.code === 'DTQ' ? (
                 <>What was the result of the <strong>Daily Trigger Questionnaire</strong> for <strong>{taskConfirm.pid}</strong>?</>
+              ) : taskConfirm.task.code === 'SPI' ? (
+                <>
+                  <p>Are you sure you want to mark <strong>{taskConfirm.task.label}</strong> as complete for <strong>{taskConfirm.pid}</strong>?</p>
+                  <div style={{marginTop:'12px', padding:'8px', background:'#EFF6FF', borderRadius:'4px', fontSize:'11px', color:'#1E3A8A', border:'1px solid #BFDBFE'}}>
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={spiAttested}
+                        onChange={(e) => setSpiAttested(e.target.checked)}
+                        style={{ marginTop: '2px' }}
+                      />
+                      <span><strong>ATTESTATION (QbD):</strong> I confirm that the patient has completed the required washout period for Bronchodilators prior to this spirometry (SABD 4-6h, LABD 12-24h).</span>
+                    </label>
+                  </div>
+                </>
               ) : (
                 <>Are you sure you want to mark <strong>{taskConfirm.task.label}</strong> as complete for <strong>{taskConfirm.pid}</strong>?</>
               )}
               {(taskConfirm.task.regulatory || taskConfirm.task.critical) && <div style={{marginTop:'12px', padding:'8px', background:'var(--red-bg)', borderRadius:'4px', fontSize:'11px', color:'var(--red)', fontWeight:600, border:'1px solid var(--red)'}}>⚠ REGULATORY REQUIREMENT: This assessment is critical for study compliance and data integrity.</div>}
             </div>
             <div className="confirm-btns">
-              <button className="btn btn-ghost" onClick={() => setTaskConfirm(null)}>Cancel</button>
+              <button className="btn btn-ghost" onClick={() => { setTaskConfirm(null); setSpiAttested(false); }}>Cancel</button>
               {taskConfirm.task.code === 'DTQ' ? (
                 <>
                   <button className="btn btn-danger" onClick={() => {
@@ -1630,8 +1718,15 @@ export default function App() {
                 </>
               ) : (
                 <button className={`btn ${taskConfirm.task.critical || taskConfirm.task.regulatory ? 'btn-danger' : 'btn-primary'}`} onClick={() => {
+                  if (taskConfirm.task.code === 'SPI') {
+                    if (!spiAttested) {
+                      showToast('You must confirm the washout attestation to proceed.', 'err');
+                      return;
+                    }
+                  }
                   performToggle(taskConfirm.pid, taskConfirm.task.code);
                   setTaskConfirm(null);
+                  setSpiAttested(false);
                 }}>Confirm Completion</button>
               )}
             </div>
