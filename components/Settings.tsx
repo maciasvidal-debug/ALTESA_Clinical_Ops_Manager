@@ -92,7 +92,7 @@ export function Settings({ patients, onClose, onImportQueries }: SettingsProps) 
       const text = await file.text();
       const pkg = JSON.parse(text);
       
-      // Decrypt using CRC's private key and verify Manager's signature
+      // Decrypt using CRC's private key and verify Manager&apos;s signature
       const data = await verifyAndDecrypt(pkg, 'CRC-PRIV-MOCK', 'MGR-PUB-MOCK');
       
       onImportQueries(data);
@@ -199,7 +199,7 @@ export function Settings({ patients, onClose, onImportQueries }: SettingsProps) 
               <div style={{ position: 'absolute', top: '-80px', left: '0', background: '#1E3A8A', color: '#fff', padding: '16px', borderRadius: '8px', width: '320px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.2)' }}>
                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#93C5FD', marginBottom: '4px' }}>STEP 2 OF 3</div>
                 <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Export Secure Package</div>
-                <div style={{ fontSize: '13px', color: '#DBEAFE', marginBottom: '12px' }}>Now that you have the Manager's key, you can generate an encrypted package. PII is automatically filtered.</div>
+                <div style={{ fontSize: '13px', color: '#DBEAFE', marginBottom: '12px' }}>Now that you have the Manager&apos;s key, you can generate an encrypted package. PII is automatically filtered.</div>
                 <button onClick={nextTourStep} style={{ background: '#3B82F6', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>Next <ChevronRight size={14} /></button>
               </div>
             )}
@@ -246,7 +246,7 @@ export function Settings({ patients, onClose, onImportQueries }: SettingsProps) 
               <div style={{ position: 'absolute', top: '-80px', left: '0', background: '#78350F', color: '#fff', padding: '16px', borderRadius: '8px', width: '320px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.2)' }}>
                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#FCD34D', marginBottom: '4px' }}>STEP 1 OF 3</div>
                 <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Import Manager Key</div>
-                <div style={{ fontSize: '13px', color: '#FEF3C7', marginBottom: '12px' }}>To securely send data, you first need the Manager's Public Key. Ask your Manager to export it from their dashboard.</div>
+                <div style={{ fontSize: '13px', color: '#FEF3C7', marginBottom: '12px' }}>To securely send data, you first need the Manager&apos;s Public Key. Ask your Manager to export it from their dashboard.</div>
                 <button onClick={nextTourStep} style={{ background: '#F59E0B', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>Next <ChevronRight size={14} /></button>
               </div>
             )}
