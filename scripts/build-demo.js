@@ -124,6 +124,33 @@ html = html.replace(jsRegex, (match, src) => {
 // Next.js uses stringified JSON inside scripts that might contain paths to missing chunks.
 // We'll replace occurrences of "static/chunks/..." with the base64 content if we can safely do it,
 // though usually just replacing the <script src="..."> is enough for hydration to work.
+console.log('Inlining internal Next.js references (fonts, css, chunks)...');
+// Replace Next.js internal paths inside inline scripts with their data URI counterparts
+const internalRegex = /(\/_next\/static\/[^"'\\]+|static\/chunks\/[^"'\\]+)/g;
+html = html.replace(internalRegex, (match) => {
+  let relativePath = match;
+  // Make sure it starts with a slash for the lookup if it's a chunk path missing it
+  if (!relativePath.startsWith('/')) {
+    relativePath = '/' + relativePath;
+  }
+  // The static/chunks inside __next_f usually imply the _next prefix
+  if (!relativePath.startsWith('/_next/')) {
+    relativePath = '/_next/' + relativePath.substring(1);
+  }
+
+  let mimeType = 'application/octet-stream';
+  if (match.endsWith('.woff2')) mimeType = 'font/woff2';
+  else if (match.endsWith('.woff')) mimeType = 'font/woff';
+  else if (match.endsWith('.css')) mimeType = 'text/css';
+  else if (match.endsWith('.js')) mimeType = 'application/javascript';
+  else if (match.endsWith('.png')) mimeType = 'image/png';
+
+  const dataUri = getFileAsBase64(relativePath, mimeType);
+  if (dataUri) {
+    return dataUri;
+  }
+  return match;
+});
 
 // Inline images
 console.log('Inlining Images...');
