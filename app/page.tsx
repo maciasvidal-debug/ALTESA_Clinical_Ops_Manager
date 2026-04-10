@@ -1321,8 +1321,8 @@ export default function App() {
   };
 
   const dtc = diffDays(TODAY, p.nextVisit);
-  const win = 3;
-  const winPct = Math.min(100, Math.max(0, 50 + (dtc / win) * 50));
+  const win = p.phaseCode === 'scr' ? 21 : p.phaseCode === 'psb' ? 5 : p.phaseCode === 'rv' ? 0 : p.phaseCode === 'tx' ? (p.nextVisitLabel.includes('Day 3') || p.nextVisitLabel.includes('Day 7') ? 1 : p.nextVisitLabel.includes('Day 14') || p.nextVisitLabel.includes('Day 28') ? 2 : 3) : 3;
+  const winPct = win === 0 ? (dtc === 0 ? 50 : (dtc < 0 ? 0 : 100)) : Math.min(100, Math.max(0, 50 + (dtc / win) * 50));
   const wc = Math.abs(dtc) <= win ? 'var(--green)' : dtc < 0 ? 'var(--red)' : 'var(--amber)';
 
   return (
