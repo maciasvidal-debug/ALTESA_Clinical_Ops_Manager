@@ -38,10 +38,19 @@ export function getTodayPct(p: any) {
     const days = Math.max(0, diffDays(p.psbStartDate || p.screeningDate, TODAY));
     return SCR_PCT + Math.min(PSB_PCT, (days / PSB_DAYS) * PSB_PCT);
   }
+  else if (p.phaseCode === 'rv') {
+    // If we are in RV window, we push exactly to the edge of the RV segment
+    return SCR_PCT + PSB_PCT + RV_PCT;
+  }
   else if (p.phaseCode === 'tx') {
     // If we reach TX, we force the marker past the previous phases, ensuring visual consistency regardless of previous durations
     const days = Math.max(0, diffDays(p.randomizationDate || p.rvInfectionDate || TODAY, TODAY));
     return SCR_PCT + PSB_PCT + RV_PCT + Math.min(TX_PCT, (days / TX_DAYS) * TX_PCT);
+  }
+  else if (p.phaseCode === 'et') {
+    // Early termination stops progress visual marker where it died
+    const days = Math.max(0, diffDays(p.rvInfectionDate || p.psbStartDate || TODAY, TODAY));
+    return SCR_PCT + PSB_PCT + Math.min(RV_PCT, (days / 2) * RV_PCT);
   }
   else if (p.phaseCode === 'fu') {
     // Follow-up anchors from randomization date explicitly, +14 days to start
