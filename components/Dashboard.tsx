@@ -137,7 +137,7 @@ export const Dashboard = ({
               const isWarn = p.alert && !isCrit;
               const urgClass = isCrit ? 'crit' : isWarn ? 'warn' : done === total && total > 0 ? 'ok' : 'info';
               const urgText = isCrit ? <><AlertTriangle size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> DTQ+ — Act now</> : isWarn ? p.alert === 'MONTHLY_CALL' ? <><Phone size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Call due</> : <><Activity size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Rescreening</> : done === total && total > 0 ? <><Check size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> All done</> : 'In progress';
-              const phBadge = { scr: 'pb-scr', psb: 'pb-psb', tx: 'pb-tx', fu: 'pb-fu' }[p.phaseCode] || 'pb-psb';
+              const phBadge = { scr: 'pb-scr', psb: 'pb-psb', tx: 'pb-tx', fu: 'pb-fu', et: 'pb-et' }[p.phaseCode] || 'pb-psb';
               return (
                 <div key={p.id} className={`pt-row ${isCrit ? 'is-crit' : isWarn ? 'is-warn' : ''}`}
                   tabIndex={0} role="button" aria-label={`Open ${p.id} — ${p.phaseLabel}`}
@@ -221,7 +221,7 @@ export const Dashboard = ({
                   const isWarn = p.alert && !isCrit;
                   const urgClass = isCrit ? 'crit' : isWarn ? 'warn' : done === total && total > 0 ? 'ok' : 'info';
                   const urgText = isCrit ? <><AlertTriangle size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> DTQ+</> : isWarn ? p.alert === 'MONTHLY_CALL' ? <><Phone size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Call due</> : <><Activity size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Rescreening</> : done === total && total > 0 ? <><Check size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Done</> : 'In progress';
-                  const phBadge = { scr: 'pb-scr', psb: 'pb-psb', tx: 'pb-tx', fu: 'pb-fu' }[p.phaseCode] || 'pb-psb';
+                  const phBadge = { scr: 'pb-scr', psb: 'pb-psb', tx: 'pb-tx', fu: 'pb-fu', et: 'pb-et' }[p.phaseCode] || 'pb-psb';
                   
                   return (
                     <div

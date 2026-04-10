@@ -35,7 +35,7 @@ export const PatientDetail = ({
   const taskListRef = useRef<HTMLDivElement>(null);
 
   const { done, total } = countTasks(patient);
-  const phBadge = { scr: 'pb-scr', psb: 'pb-psb', tx: 'pb-tx', fu: 'pb-fu' }[patient.phaseCode] || 'pb-psb';
+  const phBadge = { scr: 'pb-scr', psb: 'pb-psb', tx: 'pb-tx', fu: 'pb-fu', et: 'pb-et' }[patient.phaseCode] || 'pb-psb';
 
   const renderTask = (t: Task) => {
     const checked = isChecked(t.code);

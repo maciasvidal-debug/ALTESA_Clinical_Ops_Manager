@@ -211,6 +211,7 @@ abbr[title] { text-decoration: underline dotted var(--border2); cursor: help; te
 .pb-rv { background: var(--ph-rv); color: #8A1A1A; }
 .pb-tx { background: var(--ph-tx); color: #4A1A8A; }
 .pb-fu { background: var(--ph-fu); color: #1A6A45; }
+.pb-et { background: var(--red); color: #FFFFFF; }
 
 /* ─── PATIENT VIEW ─── */
 .pv-wrap { max-width: 1100px; margin: 0 auto; }

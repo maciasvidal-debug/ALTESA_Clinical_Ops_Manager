@@ -394,7 +394,16 @@ export default function App() {
         setCdStart(Date.now() - 3 * 3600000); // Start countdown
         setWzOpen(true); // Open wizard
         showToast('DTQ POSITIVE: RV Protocol Activated', 'crit');
-        return { ...p, dtqPos: true, alert: 'DTQ_POSITIVE', tasks: updatedTasks };
+        return {
+          ...p,
+          dtqPos: true,
+          alert: 'DTQ_POSITIVE',
+          phase: 'RV INFECTION',
+          phaseCode: 'rv',
+          phaseLabel: 'RV Protocol Active · Day 1',
+          rvInfectionDate: TODAY,
+          tasks: updatedTasks
+        };
       } else {
         showToast('DTQ Negative: Patient remains in PSB', 'ok');
         return { ...p, dtqPos: false, alert: null, tasks: updatedTasks };
@@ -1026,9 +1035,9 @@ export default function App() {
 
   const { done, total } = countTasks(p);
   const pct = total ? Math.round((done / total) * 100) : 0;
-  const phBadge = { scr: 'pb-scr', psb: 'pb-psb', rv: 'pb-rv', tx: 'pb-tx', fu: 'pb-fu' }[p.phaseCode] || 'pb-psb';
+  const phBadge = { scr: 'pb-scr', psb: 'pb-psb', rv: 'pb-rv', tx: 'pb-tx', fu: 'pb-fu', et: 'pb-et' }[p.phaseCode] || 'pb-psb';
   const nowPct = getTodayPct(p);
-  const phaseColor = { scr: 'var(--ph-scr)', psb: 'var(--ph-psb)', rv: 'var(--ph-rv)', tx: 'var(--ph-tx)', fu: 'var(--ph-fu)' }[p.phaseCode] || 'var(--border)';
+  const phaseColor = { scr: 'var(--ph-scr)', psb: 'var(--ph-psb)', rv: 'var(--ph-rv)', tx: 'var(--ph-tx)', fu: 'var(--ph-fu)', et: 'var(--red)' }[p.phaseCode] || 'var(--border)';
 
   const milestones = [];
   if (p.screeningDate) milestones.push({ l: 'Screening', d: p.screeningDate, cls: 'ms-done' });
@@ -1567,6 +1576,7 @@ export default function App() {
       {/* Modals */}
       {wzOpen && (
         <Wizard 
+          patientId={p.id}
           step={wzStep} 
           setStep={setWzStep} 
           chks={wzChks} 
@@ -1579,6 +1589,23 @@ export default function App() {
             } else {
               setWzOpen(false);
             }
+          }}
+          onEarlyTermination={() => {
+            setWzOpen(false);
+            setPatients(prev => prev.map(pt => {
+              if (pt.id !== p.id) return pt;
+              return {
+                ...pt,
+                dtqPos: false,
+                alert: null,
+                phase: 'EARLY TERMINATION',
+                phaseCode: 'et',
+                phaseLabel: 'Early Termination (Screen Failure)',
+                tasks: { q: [], pr: [], l: [], ad: [] },
+                labNote: `Patient withdrawn. Randomization criteria not met or window expired on ${fmtISO(TODAY)}.`
+              };
+            }));
+            showToast(`${p.id} marked as Early Termination`, 'ok');
           }}
           onRandomise={() => setRndConfirmOpen(true)}
           onToggleChk={(step: number, i: number) => {
@@ -1671,17 +1698,17 @@ export default function App() {
           <div className="confirm-card">
             <div className="confirm-icon"><Microscope size={32} color="var(--blue)" /></div>
             <div className="confirm-title">Confirm Randomisation</div>
-            <div className="confirm-body">You are about to <strong>randomise ALTESA-047</strong> and initiate the Treatment Period. This action is <strong>irreversible</strong> in the clinical record. All 7 protocol steps have been confirmed.</div>
+            <div className="confirm-body">You are about to <strong>randomise {p.id}</strong> and initiate the Treatment Period. This action is <strong>irreversible</strong> in the clinical record. All 7 protocol steps have been confirmed.</div>
             <div className="confirm-btns">
               <button className="btn btn-ghost" onClick={() => setRndConfirmOpen(false)}>Review again</button>
               <button className="btn btn-success" onClick={() => {
                 setRndConfirmOpen(false);
                 setWzOpen(false);
 
-                setPatients(prev => prev.map(p => {
-                  if (p.id !== 'ALTESA-047') return p;
+                setPatients(prev => prev.map(pt => {
+                  if (pt.id !== p.id) return pt;
                   return {
-                    ...p,
+                    ...pt,
                     dtqPos: false,
                     alert: null,
                     phase: 'TREATMENT',
@@ -1713,7 +1740,7 @@ export default function App() {
                   };
                 }));
 
-                showToast('ALTESA-047 randomised — Treatment Period Day 1 tasks injected', 'ok');
+                showToast(`${p.id} randomised — Treatment Period Day 1 tasks injected`, 'ok');
               }}><Check size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Confirm Randomisation</button>
             </div>
           </div>
