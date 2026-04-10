@@ -24,7 +24,7 @@ export function getTodayPct(p: any) {
   const FUP_PCT = 16.0;
 
   // Real projected limits for milestone tracking to prevent visual desync
-  const SCR_DAYS = 42;
+  const SCR_DAYS = 21;
   const PSB_DAYS = 476;
   const TX_DAYS = 14;
   const FUP_DAYS = 28;
@@ -183,7 +183,7 @@ export const PATIENTS: Patient[] = [
       ]
     },
     ers: [], psb: null, psbRecords: 0,
-    nextVisit: addDays(TODAY, 7), nextVisitLabel: 'PSB Start — Week 1 Day 1 (Home)',
+    nextVisit: addDays(TODAY, 21), nextVisitLabel: 'PSB Start — Projected (Max 21d)',
     documents: [
       { id: 'd3', name: 'Informed Consent v2.0', category: 'ICF', extension: 'PDF', uploadDate: TODAY, url: '#', size: '1.2 MB', critical: true },
     ]

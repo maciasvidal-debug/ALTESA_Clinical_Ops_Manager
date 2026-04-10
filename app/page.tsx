@@ -64,6 +64,7 @@ export default function App() {
   const [newPatientId, setNewPatientId] = useState('');
   const [newPatientName, setNewPatientName] = useState('');
   const [newPatientLang, setNewPatientLang] = useState('English');
+  const [newPatientScreeningDate, setNewPatientScreeningDate] = useState<string>(fmtISO(TODAY));
   const [recentIds, setRecentIds] = useState<string[]>([]);
   const taskListRef = useRef<HTMLDivElement>(null);
   
@@ -71,6 +72,9 @@ export default function App() {
   const [rescreeningStep, setRescreeningStep] = useState(1);
   const [rescreeningData, setRescreeningData] = useState<any>(null);
   const [rescreeningChks, setRescreeningChks] = useState<Record<number, Set<number>>>({});
+
+  const [completeScreeningOpen, setCompleteScreeningOpen] = useState(false);
+  const [psbDayOneDate, setPsbDayOneDate] = useState<string>('');
   
   const [dashFilter, setDashFilter] = useState<'all' | 'crit' | 'warn' | 'routine'>('all');
   const [activeTab, setActiveTab] = useState<'checklist' | 'documents'>('checklist');
@@ -132,6 +136,42 @@ export default function App() {
       next[step] = s;
       return next;
     });
+  };
+
+  const handleCompleteScreening = () => {
+    if (!selPatientId) return;
+
+    const d = new Date(psbDayOneDate + 'T12:00:00');
+
+    setPatients(prev => prev.map(p => {
+      if (p.id !== selPatientId) return p;
+
+      return {
+        ...p,
+        phase: 'PSB',
+        phaseCode: 'psb',
+        phaseLabel: 'Asymptomatic Phase · Week 1',
+        psbStartDate: d,
+        studyDay: diffDays(d, TODAY),
+        nextVisit: addDays(d, 7),
+        nextVisitLabel: 'PSB Check-in (Week 1)',
+        tasks: {
+          q: [
+            { code: 'DTQ', label: 'Daily Trigger Questionnaire', icon: '🔔', done: false, note: 'Daily during PSB' },
+            { code: 'ERS', label: 'E-RS / PGIS (EXACT)', icon: '📋', done: false, note: 'Daily during PSB' },
+            { code: 'WURSS', label: 'WURSS-11', icon: '📋', done: false, note: 'Daily during PSB' },
+          ],
+          pr: [],
+          l: [],
+          ad: [
+            { code: 'PRN', label: 'COPD PRN Inhaler Use', icon: '💨', done: false, note: 'Collected with E-RS' },
+          ]
+        }
+      };
+    }));
+
+    setCompleteScreeningOpen(false);
+    showToast('Screening completed and advanced to PSB', 'ok');
   };
 
   const handleCompleteRescreening = () => {
@@ -446,21 +486,23 @@ export default function App() {
       return;
     }
     
+    const screeningDateVal = new Date(newPatientScreeningDate + 'T12:00:00');
+
     const newPatient: Patient = {
       id,
       name,
       phase: 'SCREENING',
       phaseCode: 'scr',
       phaseLabel: 'Screening · Day 0',
-      studyDay: diffDays(TODAY, TODAY),
+      studyDay: diffDays(screeningDateVal, TODAY),
       loc: 'CLINIC',
       lang: newPatientLang,
       alert: null,
-      screeningDate: TODAY,
+      screeningDate: screeningDateVal,
       tasks: {
         q: [
           { code: 'CAT', label: 'CAT — COPD Assessment Test', icon: '📋', done: false, note: 'Screening and Rescreening visits only (Table 1)', dueDate: TODAY },
-          { code: 'IC', label: 'Informed Consent', icon: '📝', done: false, note: 'New ICF required only if updated version available (fn. a)', dueDate: TODAY },
+          { code: 'IC', label: 'Informed Consent', icon: '📝', done: true, note: 'New ICF required only if updated version available (fn. a)', dueDate: TODAY },
         ],
         pr: [
           { code: 'OSC', label: 'Oscillometry', icon: '🫁', done: false, seq: true, note: 'Perform BEFORE spirometry at all visits with both (fn. f)', dueDate: TODAY },
@@ -485,8 +527,8 @@ export default function App() {
       ers: [],
       psb: null,
       psbRecords: 0,
-      nextVisit: addDays(TODAY, 7),
-      nextVisitLabel: 'PSB Start — Week 1 Day 1 (Home)',
+      nextVisit: addDays(screeningDateVal, 21),
+      nextVisitLabel: 'PSB Start — Projected (Max 21d)',
       documents: [],
     };
     
@@ -495,6 +537,7 @@ export default function App() {
     setNewPatientId('');
     setNewPatientName('');
     setNewPatientLang('English');
+    setNewPatientScreeningDate(fmtISO(TODAY));
     setModalErr('');
     showToast(`Patient ${newPatient.id} added successfully`, 'ok');
   };
@@ -796,6 +839,21 @@ export default function App() {
                     <div className="modal-help">
                       <Info size={14} />
                       <span>Sets the default language for ePRO questionnaires and patient-facing materials.</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="modal-label"><Calendar size={12} /> Consent Date (Screening Day 0)</label>
+                    <input
+                      type="date"
+                      className="modal-input"
+                      value={newPatientScreeningDate}
+                      onChange={e => setNewPatientScreeningDate(e.target.value)}
+                      required
+                      max={fmtISO(TODAY)}
+                    />
+                    <div className="modal-help">
+                      <Info size={14} />
+                      <span>The date the patient signed the Informed Consent Form. Starts the 21-day window.</span>
                     </div>
                   </div>
                 </div>
@@ -1349,7 +1407,21 @@ export default function App() {
               <span style={{ opacity: 0.6, marginLeft: '8px' }}>(Hover or click &quot;Trace Flow&quot; to see links)</span>
             </div>
           </div>
-          <div><span className={`progress-pill ${pct === 100 ? 'done' : ''}`}>{done}/{total} {pct === 100 ? <Check size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> : ''}</span></div>
+          <div>
+            <span className={`progress-pill ${pct === 100 ? 'done' : ''}`}>{done}/{total} {pct === 100 ? <Check size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> : ''}</span>
+            {p.phaseCode === 'scr' && pct === 100 && role === 'coordinator' && (
+              <button
+                className="btn btn-success"
+                style={{ marginLeft: '12px', padding: '4px 12px', minHeight: '28px', fontSize: '11px', display: 'inline-flex' }}
+                onClick={() => {
+                  setPsbDayOneDate(fmtISO(TODAY));
+                  setCompleteScreeningOpen(true);
+                }}
+              >
+                Complete Screening
+              </button>
+            )}
+          </div>
         </div>
         <div className="full-tl-section">
           <div className="full-tl-wrap">
@@ -1535,6 +1607,48 @@ export default function App() {
             <div className="confirm-btns">
               <button className="btn btn-ghost" onClick={() => setWzConfirmOpen(false)}>Keep open</button>
               <button className="btn btn-danger" onClick={() => { setWzConfirmOpen(false); setWzOpen(false); }}>Close &amp; save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {completeScreeningOpen && (
+        <div className="confirm-overlay" style={{ zIndex: 700 }} onClick={() => setCompleteScreeningOpen(false)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div className="modal-title">Confirm Complete Screening</div>
+              <button type="button" className="ibtn" onClick={() => setCompleteScreeningOpen(false)}><X size={18} /></button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: '16px' }}>
+                All Screening requirements have been met. Transitioning to the <strong>Asymptomatic Phase (PSB)</strong>.
+              </div>
+              <div>
+                <label className="modal-label"><Calendar size={12} /> Actual PSB Day 1 Date</label>
+                <input
+                  type="date"
+                  className="modal-input"
+                  value={psbDayOneDate}
+                  onChange={e => setPsbDayOneDate(e.target.value)}
+                  required
+                />
+                <div className="modal-help">
+                  <Info size={14} />
+                  <span>The true date the participant entered the Asymptomatic Phase (Day 1). This will re-calibrate all future visits and study days.</span>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-ghost" onClick={() => setCompleteScreeningOpen(false)}>Cancel</button>
+              <button
+                type="button"
+                className="btn btn-success"
+                disabled={!psbDayOneDate}
+                onClick={handleCompleteScreening}
+              >
+                <Check size={14} style={{ marginRight: '6px', display: 'inline' }} />
+                Confirm & Start PSB
+              </button>
             </div>
           </div>
         </div>
