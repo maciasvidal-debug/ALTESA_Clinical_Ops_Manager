@@ -500,7 +500,7 @@ export default function App() {
     setPatients(prev => prev.map(p => {
       if (p.id === pid) {
         const updatedTasks = { ...p.tasks };
-        Object.keys(updatedTasks).forEach(cat => {
+        (Object.keys(updatedTasks) as Array<keyof typeof updatedTasks>).forEach(cat => {
           updatedTasks[cat] = updatedTasks[cat].map((t: any) => {
             if (t.code === code) {
               return { 
