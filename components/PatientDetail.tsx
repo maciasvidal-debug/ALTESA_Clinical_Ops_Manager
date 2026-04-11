@@ -93,6 +93,9 @@ export const PatientDetail = ({
                 <DLPWrapper onViolation={onDLPViolation}>{patient.id}</DLPWrapper>
               </h1>
               <span className={`phase-badge ${phBadge}`}>{displayPhaseLabel}</span>
+              <div className={`progress-pill ${done === total && total > 0 ? 'done' : ''}`} style={{ marginLeft: '8px' }}>
+                {done}/{total} Tasks ({total > 0 ? Math.round((done / total) * 100) : 0}%)
+              </div>
             </div>
             <div className="pt-name-lg">
               <DLPWrapper onViolation={onDLPViolation}>{patient.name}</DLPWrapper> · {patient.lang}

@@ -5,11 +5,16 @@ import {
   BarChart2, AlertTriangle, CheckCircle2, Clock, 
   Activity, Shield, Calendar, ChevronRight, 
   Search, Filter, MessageSquare, Lock, FileText, Key,
-  TrendingUp, Map, List, LayoutGrid, Upload, X, Terminal, Download, LifeBuoy
+  TrendingUp, Map, List, LayoutGrid, Upload, X, Terminal, Download, LifeBuoy,
+  PieChart as PieChartIcon, BarChart as BarChartIcon, LineChart as LineChartIcon
 } from 'lucide-react';
-import { Patient, countTasks, TODAY, diffDays, fmtHuman } from '@/lib/data';
+import { Patient, countTasks, TODAY, diffDays, fmtHuman, addDays } from '@/lib/data';
 import { DLPWrapper } from '@/components/DLPWrapper';
 import { verifyAndDecrypt, encryptAndSign } from '@/lib/crypto';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+  BarChart, Bar, Cell, PieChart, Pie, Legend
+} from 'recharts';
 
 interface ManagerDashboardProps {
   patients: Patient[];
@@ -22,7 +27,7 @@ interface ManagerDashboardProps {
 }
 
 export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, isChecked, onOpenPatient, onImportPatients }: ManagerDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'tracker' | 'risk' | 'queries' | 'recovery'>('tracker');
+  const [activeTab, setActiveTab] = useState<'tracker' | 'risk' | 'analytics' | 'queries' | 'recovery'>('tracker');
   const [trackerView, setTrackerView] = useState<'board' | 'grid' | 'calendar'>('board');
   const [siteFilter, setSiteFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -189,6 +194,147 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
     return { overdues, todays, active, openQueries };
   }, [filteredPatients, filteredQueries, isChecked]);
 
+  // --- Analytics Data ---
+  const analyticsData = useMemo(() => {
+    // 1. Enrollment Trend (Cumulative)
+    const sortedByDate = [...patients].sort((a, b) => a.screeningDate.getTime() - b.screeningDate.getTime());
+    
+    const firstDate = sortedByDate[0]?.screeningDate || TODAY;
+    const daysElapsed = Math.max(1, diffDays(firstDate, TODAY));
+    const ratePerDay = patients.length / daysElapsed;
+    const target = 50; // Mock target
+    const remaining = target - patients.length;
+    const daysToTarget = remaining > 0 ? Math.ceil(remaining / ratePerDay) : 0;
+    const projectedDate = addDays(TODAY, daysToTarget);
+
+    const trend = sortedByDate.map((p, i) => ({
+      date: p.screeningDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      actual: (i + 1) as number | null,
+      projected: null as number | null
+    }));
+
+    // Add Today point
+    const todayStr = TODAY.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    if (trend.length > 0 && trend[trend.length - 1].date !== todayStr) {
+      trend.push({
+        date: todayStr,
+        actual: patients.length,
+        projected: patients.length
+      });
+    } else if (trend.length > 0) {
+      trend[trend.length - 1].projected = patients.length;
+    } else {
+      trend.push({ date: todayStr, actual: 0, projected: 0 });
+    }
+
+    // Add Projected point
+    if (daysToTarget > 0) {
+      trend.push({
+        date: projectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        actual: null,
+        projected: target
+      });
+    }
+
+    // 2. Site Performance
+    const siteStats = sites.map(site => {
+      const sitePatients = patients.filter(p => p.id.startsWith(site + '-'));
+      const totalTasks = sitePatients.reduce((acc, p) => acc + countTasks(p).total, 0);
+      const doneTasks = sitePatients.reduce((acc, p) => acc + countTasks(p).done, 0);
+      const compliance = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+      const openQueries = queries.filter(q => q.pid.startsWith(site + '-') && q.status === 'open').length;
+      
+      return {
+        name: site,
+        subjects: sitePatients.length,
+        compliance,
+        queries: openQueries
+      };
+    });
+
+    // 3. Phase Distribution
+    const phases = [
+      { name: 'Screening', value: patients.filter(p => p.phaseCode === 'scr').length, color: '#94A3B8' },
+      { name: 'PSB', value: patients.filter(p => p.phaseCode === 'psb').length, color: '#38BDF8' },
+      { name: 'RV/Treatment', value: patients.filter(p => p.phaseCode === 'rv' || p.phaseCode === 'tx').length, color: '#8B5CF6' },
+      { name: 'Follow-up', value: patients.filter(p => p.phaseCode === 'fu').length, color: '#10B981' },
+    ];
+
+    return { trend, siteStats, phases, projectedDate, ratePerDay, target };
+  }, [patients, queries, sites]);
+
+  // --- Risk Intelligence ---
+  const riskIntelligence = useMemo(() => {
+    return filteredPatients.map(p => {
+      let riskScore = 0;
+      const reasons: string[] = [];
+
+      // 1. Alerts & Critical Windows
+      if (p.alert === 'DTQ_POSITIVE') {
+        riskScore += 60;
+        reasons.push("Active RV Window (48h+6h)");
+      } else if (p.alert === 'RESCREENING') {
+        riskScore += 30;
+        reasons.push("Rescreening required");
+      } else if (p.alert === 'MONTHLY_CALL') {
+        riskScore += 15;
+        reasons.push("Monthly call due");
+      } else if (p.alert) {
+        riskScore += 10;
+        reasons.push(`Active alert: ${p.alert}`);
+      }
+
+      // 2. Task Overdue Risk
+      const allTasks = [...(p.tasks.q || []), ...(p.tasks.pr || []), ...(p.tasks.l || []), ...(p.tasks.ad || [])];
+      const overdueTasks = allTasks.filter(t => !isChecked(p.id, t.code) && t.dueDate && diffDays(TODAY, t.dueDate) < 0);
+      
+      if (overdueTasks.length > 0) {
+        let overdueScore = 0;
+        let criticalOverdue = 0;
+        let urgentOverdue = 0;
+
+        overdueTasks.forEach(t => {
+          if (t.critical) {
+            overdueScore += 25;
+            criticalOverdue++;
+          } else if (t.urgent) {
+            overdueScore += 15;
+            urgentOverdue++;
+          } else {
+            overdueScore += 10;
+          }
+        });
+
+        riskScore += overdueScore;
+        if (criticalOverdue > 0) reasons.push(`${criticalOverdue} critical tasks overdue`);
+        if (urgentOverdue > 0) reasons.push(`${urgentOverdue} urgent tasks overdue`);
+        const normalOverdue = overdueTasks.length - criticalOverdue - urgentOverdue;
+        if (normalOverdue > 0) reasons.push(`${normalOverdue} tasks overdue`);
+      }
+
+      // 3. Missing Critical Docs
+      const hasICF = p.documents.some(d => d.category === 'ICF');
+      if (!hasICF) {
+        riskScore += 50;
+        reasons.push("Missing Informed Consent (ICF)");
+      }
+
+      // 4. Low Compliance
+      const { done, total } = countTasks(p);
+      const completionPct = total > 0 ? (done / total) * 100 : 100;
+      if (completionPct < 50 && total > 0) {
+        riskScore += 20;
+        reasons.push(`Low compliance (${Math.round(completionPct)}%)`);
+      }
+
+      return {
+        id: p.id,
+        score: Math.min(100, riskScore),
+        reasons
+      };
+    }).sort((a, b) => b.score - a.score);
+  }, [filteredPatients, isChecked]);
+
   // Tracker Columns
   const columns = [
     { id: 'scr', label: 'Screening' },
@@ -226,7 +372,8 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
         </div>
         <div className="hdr-center" style={{ display: 'flex', gap: '8px' }}>
           <button className={`ftab ${activeTab === 'tracker' ? 'active' : ''}`} style={{ color: activeTab === 'tracker' ? '#fff' : '#94A3B8', background: activeTab === 'tracker' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('tracker')}><Map size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Subject Tracker</button>
-          <button className={`ftab ${activeTab === 'risk' ? 'active' : ''}`} style={{ color: activeTab === 'risk' ? '#fff' : '#94A3B8', background: activeTab === 'risk' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('risk')}><TrendingUp size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Risk & Heatmap</button>
+          <button className={`ftab ${activeTab === 'risk' ? 'active' : ''}`} style={{ color: activeTab === 'risk' ? '#fff' : '#94A3B8', background: activeTab === 'risk' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('risk')}><AlertTriangle size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Risk Intelligence</button>
+          <button className={`ftab ${activeTab === 'analytics' ? 'active' : ''}`} style={{ color: activeTab === 'analytics' ? '#fff' : '#94A3B8', background: activeTab === 'analytics' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('analytics')}><BarChart2 size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Analytics</button>
           <button className={`ftab ${activeTab === 'queries' ? 'active' : ''}`} style={{ color: activeTab === 'queries' ? '#fff' : '#94A3B8', background: activeTab === 'queries' ? '#334155' : 'transparent', border: 'none', position: 'relative', zIndex: tourStep === 3 ? 1000 : 1, boxShadow: tourStep === 3 ? '0 0 0 2px #8B5CF6' : 'none' }} onClick={() => setActiveTab('queries')}><MessageSquare size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Queries</button>
           <button className={`ftab ${activeTab === 'recovery' ? 'active' : ''}`} style={{ color: activeTab === 'recovery' ? '#fff' : '#94A3B8', background: activeTab === 'recovery' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('recovery')}><LifeBuoy size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Recovery Tool</button>
         </div>
@@ -485,52 +632,203 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
           </div>
         )}
 
-        {/* Risk & Heatmap */}
+        {/* Risk Intelligence */}
         {activeTab === 'risk' && (
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
             <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '24px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}><Calendar size={18} color="#3B82F6"/> Deviation Heatmap (Next 14 Days)</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px' }}>
-                {Array(14).fill(0).map((_, i) => {
-                  const d = new Date(TODAY);
-                  d.setDate(d.getDate() + i);
-                  const isHighRisk = i === 2 || i === 5; // Mock risk days
-                  const isMedRisk = i === 8 || i === 11;
-                  
-                  return (
-                    <div key={i} style={{ 
-                      border: '1px solid #E2E8F0', 
-                      borderRadius: '8px', 
-                      padding: '12px',
-                      background: isHighRisk ? '#FEF2F2' : isMedRisk ? '#FFFBEB' : '#F8FAFC',
-                      borderColor: isHighRisk ? '#FECACA' : isMedRisk ? '#FDE68A' : '#E2E8F0'
-                    }}>
-                      <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '8px' }}>{d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
-                      {isHighRisk ? (
-                        <div style={{ fontSize: '12px', color: '#DC2626', fontWeight: 500 }}><AlertTriangle size={12} style={{display:'inline'}}/> 3 RV Windows</div>
-                      ) : isMedRisk ? (
-                        <div style={{ fontSize: '12px', color: '#D97706', fontWeight: 500 }}><Clock size={12} style={{display:'inline'}}/> 5 Follow-ups</div>
-                      ) : (
-                        <div style={{ fontSize: '12px', color: '#10B981' }}><CheckCircle2 size={12} style={{display:'inline'}}/> Clear</div>
-                      )}
+              <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}><AlertTriangle size={18} color="#EF4444"/> Subject Risk Prioritization</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {riskIntelligence.map(risk => (
+                  <div key={risk.id} onClick={() => onOpenPatient(risk.id)} style={{ cursor: 'pointer', padding: '16px', borderRadius: '8px', border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: risk.score > 70 ? '#FEF2F2' : risk.score > 30 ? '#FFFBEB' : '#fff' }}>
+                    <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                      <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: risk.score > 70 ? '#FEE2E2' : risk.score > 30 ? '#FEF3C7' : '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 700, color: risk.score > 70 ? '#991B1B' : risk.score > 30 ? '#92400E' : '#475569', border: `2px solid ${risk.score > 70 ? '#EF4444' : risk.score > 30 ? '#F59E0B' : '#CBD5E1'}` }}>
+                        <span style={{ margin: 'auto' }}>{risk.score}</span>
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '14px', color: '#0F172A' }}>{risk.id}</div>
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
+                          {risk.reasons.map((r, i) => (
+                            <span key={i} style={{ fontSize: '10px', background: 'rgba(0,0,0,0.05)', padding: '2px 6px', borderRadius: '4px', color: '#64748B' }}>{r}</span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  );
-                })}
+                    <ChevronRight size={16} color="#94A3B8" />
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '24px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}><TrendingUp size={18} color="#8B5CF6"/> Predictive Compliance</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ padding: '16px', background: '#FEF2F2', borderRadius: '8px', borderLeft: '4px solid #EF4444' }}>
-                  <div style={{ fontWeight: 600, fontSize: '13px', color: '#991B1B', marginBottom: '4px' }}>High Risk: Site ALTESA</div>
-                  <div style={{ fontSize: '12px', color: '#7F1D1D', lineHeight: 1.5 }}>Site has 3 randomisations next week, but historical data shows a 40% delay rate in the 48h RV window. Recommend CRA check-in.</div>
-                </div>
-                <div style={{ padding: '16px', background: '#F8FAFC', borderRadius: '8px', borderLeft: '4px solid #3B82F6' }}>
-                  <div style={{ fontWeight: 600, fontSize: '13px', color: '#1E3A8A', marginBottom: '4px' }}>Trend: ePRO Completion</div>
-                  <div style={{ fontSize: '12px', color: '#1E40AF', lineHeight: 1.5 }}>Global daily symptom diary compliance is at 92% (Up 3% from last week).</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '24px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}><Calendar size={18} color="#3B82F6"/> Critical Windows</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {filteredPatients.filter(p => p.alert === 'DTQ_POSITIVE').map(p => (
+                    <div key={p.id} style={{ padding: '12px', background: '#FEF2F2', borderRadius: '8px', borderLeft: '4px solid #EF4444' }}>
+                      <div style={{ fontWeight: 600, fontSize: '13px', color: '#991B1B' }}>{p.id} — RV Window</div>
+                      <div style={{ fontSize: '11px', color: '#B91C1C', marginTop: '2px' }}>Randomization required within 48h+6h of onset.</div>
+                    </div>
+                  ))}
+                  {filteredPatients.filter(p => p.alert === 'DTQ_POSITIVE').length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '20px', color: '#94A3B8', fontSize: '13px', border: '1px dashed #E2E8F0', borderRadius: '8px' }}>No active critical windows</div>
+                  )}
                 </div>
               </div>
+
+              <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '24px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}><TrendingUp size={18} color="#8B5CF6"/> Risk Trends</h3>
+                <div style={{ fontSize: '13px', color: '#64748B', lineHeight: 1.6 }}>
+                  Global risk index is <strong>stable</strong>. Site ALTESA shows a slight increase in overdue tasks (+5% vs last sync).
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Analytics */}
+        {activeTab === 'analytics' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Top Row: Projections */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+              <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>Enrollment Rate</div>
+                <div style={{ fontSize: '24px', fontWeight: 700, color: '#0F172A' }}>{analyticsData.ratePerDay.toFixed(2)} <span style={{ fontSize: '14px', fontWeight: 400, color: '#94A3B8' }}>subs/day</span></div>
+              </div>
+              <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>Projected Target Date</div>
+                <div style={{ fontSize: '24px', fontWeight: 700, color: '#3B82F6' }}>{analyticsData.projectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>To reach target of {analyticsData.target} subjects</div>
+              </div>
+              <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' }}>Target Completion</div>
+                <div style={{ fontSize: '24px', fontWeight: 700, color: '#10B981' }}>{Math.round((patients.length / analyticsData.target) * 100)}%</div>
+                <div style={{ width: '100%', height: '6px', background: '#E2E8F0', borderRadius: '3px', marginTop: '8px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: '#10B981', width: `${(patients.length / analyticsData.target) * 100}%` }}></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Middle Row: Charts */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+              <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>Enrollment Trend & Projection</h3>
+                  <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ width: '12px', height: '3px', background: '#3B82F6' }}></div>
+                      <span style={{ color: '#64748B' }}>Actual</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ width: '12px', height: '3px', background: '#3B82F6', borderTop: '2px dashed #3B82F6', backgroundClip: 'padding-box', backgroundColor: 'transparent' }}></div>
+                      <span style={{ color: '#64748B' }}>Projected</span>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ height: '300px', width: '100%' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={analyticsData.trend}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                      <XAxis dataKey="date" fontSize={11} tickMargin={10} axisLine={false} tickLine={false} />
+                      <YAxis fontSize={11} axisLine={false} tickLine={false} domain={[0, analyticsData.target + 5]} />
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                        labelStyle={{ fontWeight: 600, marginBottom: '4px' }}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="actual" 
+                        stroke="#3B82F6" 
+                        strokeWidth={3} 
+                        dot={{ r: 4, fill: '#3B82F6', strokeWidth: 2, stroke: '#fff' }} 
+                        activeDot={{ r: 6 }} 
+                        connectNulls
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="projected" 
+                        stroke="#3B82F6" 
+                        strokeWidth={2} 
+                        strokeDasharray="5 5" 
+                        dot={false} 
+                        activeDot={{ r: 4 }}
+                        connectNulls
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '24px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '24px' }}>Phase Distribution</h3>
+                <div style={{ height: '300px', width: '100%' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={analyticsData.phases}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {analyticsData.phases.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend verticalAlign="bottom" height={36} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Row: Site Benchmarking */}
+            <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+              <div style={{ padding: '16px 24px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>Site Benchmarking</h3>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>
+                    <th style={{ padding: '16px 24px', fontWeight: 600 }}>Site Name</th>
+                    <th style={{ padding: '16px 24px', fontWeight: 600 }}>Subjects</th>
+                    <th style={{ padding: '16px 24px', fontWeight: 600 }}>Compliance Index</th>
+                    <th style={{ padding: '16px 24px', fontWeight: 600 }}>Open Queries</th>
+                    <th style={{ padding: '16px 24px', fontWeight: 600 }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analyticsData.siteStats.map(site => (
+                    <tr key={site.name} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                      <td style={{ padding: '16px 24px', fontWeight: 600 }}>{site.name}</td>
+                      <td style={{ padding: '16px 24px' }}>{site.subjects}</td>
+                      <td style={{ padding: '16px 24px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ flex: 1, height: '6px', background: '#E2E8F0', borderRadius: '3px', overflow: 'hidden', maxWidth: '100px' }}>
+                            <div style={{ height: '100%', background: site.compliance > 80 ? '#10B981' : site.compliance > 50 ? '#F59E0B' : '#EF4444', width: `${site.compliance}%` }}></div>
+                          </div>
+                          <span style={{ fontWeight: 600 }}>{site.compliance}%</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '16px 24px' }}>{site.queries}</td>
+                      <td style={{ padding: '16px 24px' }}>
+                        <span style={{ 
+                          padding: '4px 8px', 
+                          borderRadius: '12px', 
+                          fontSize: '11px', 
+                          fontWeight: 600,
+                          background: site.compliance > 80 ? '#ECFDF5' : '#FEF2F2',
+                          color: site.compliance > 80 ? '#059669' : '#DC2626'
+                        }}>
+                          {site.compliance > 80 ? 'High Performance' : 'Needs Attention'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
