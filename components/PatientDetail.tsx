@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import { 
   ArrowLeft, Edit3, Trash2, CheckCircle2, Circle, Clock, 
   AlertTriangle, Info, ChevronRight, FileText, LayoutGrid, 
-  ListTodo, Calendar, Phone, Activity, Search
+  ListTodo, Calendar, Phone, Activity, Search, Check
 } from 'lucide-react';
 import { 
   type Patient, type Task, type Document, 
@@ -22,20 +22,24 @@ interface PatientDetailProps {
   onToggleTask: (code: string) => void;
   onUpdateDocs: (docs: Document[]) => void;
   onOpenWizard: () => void;
+  onOpenScreeningOutcome: () => void;
   isChecked: (code: string) => boolean;
   onDLPViolation: (action: string) => void;
 }
 
 export const PatientDetail = ({ 
   patient, onBack, onEdit, onDelete, onToggleTask, 
-  onUpdateDocs, onOpenWizard, isChecked, onDLPViolation 
+  onUpdateDocs, onOpenWizard, onOpenScreeningOutcome, isChecked, onDLPViolation 
 }: PatientDetailProps) => {
   const [activeTab, setActiveTab] = useState<'checklist' | 'documents'>('checklist');
   const [activeTrace, setActiveTrace] = useState<string | null>(null);
   const taskListRef = useRef<HTMLDivElement>(null);
 
   const { done, total } = countTasks(patient);
-  const phBadge = { scr: 'pb-scr', psb: 'pb-psb', tx: 'pb-tx', fu: 'pb-fu', et: 'pb-et' }[patient.phaseCode] || 'pb-psb';
+  
+  const displayPhaseCode = patient.dtqPos && !patient.randomizationDate ? 'rv' : patient.phaseCode;
+  const displayPhaseLabel = patient.dtqPos && !patient.randomizationDate ? 'RV Protocol Active' : patient.phaseLabel;
+  const phBadge = { scr: 'pb-scr', psb: 'pb-psb', rv: 'pb-rv', tx: 'pb-tx', fu: 'pb-fu' }[displayPhaseCode] || 'pb-psb';
 
   const renderTask = (t: Task) => {
     const checked = isChecked(t.code);
@@ -60,6 +64,12 @@ export const PatientDetail = ({
             {isCrit && <span className="task-crit-badge">CRITICAL</span>}
           </div>
           <div className="task-sub"><DLPWrapper onViolation={onDLPViolation}>{t.note}</DLPWrapper></div>
+          {checked && (t.attested || t.dataValue) && (
+            <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--green)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {t.attested && <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Check size={12} /> Attested</div>}
+              {t.dataValue && <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={12} /> {t.requiresData?.label}: {t.dataValue}</div>}
+            </div>
+          )}
           {t.dependsOn && (
             <div className="task-deps">
               <span style={{ opacity: 0.6 }}>Requires:</span> {t.dependsOn.join(', ')}
@@ -82,7 +92,7 @@ export const PatientDetail = ({
               <h1 className="pt-id-lg">
                 <DLPWrapper onViolation={onDLPViolation}>{patient.id}</DLPWrapper>
               </h1>
-              <span className={`phase-badge ${phBadge}`}>{patient.phaseLabel}</span>
+              <span className={`phase-badge ${phBadge}`}>{displayPhaseLabel}</span>
             </div>
             <div className="pt-name-lg">
               <DLPWrapper onViolation={onDLPViolation}>{patient.name}</DLPWrapper> · {patient.lang}
@@ -108,8 +118,8 @@ export const PatientDetail = ({
                   <div className="tl-seg s-scr" style={{ flex: '0 0 10%' }}><span>SCR</span></div>
                   <div className="tl-seg s-psb" style={{ flex: '0 0 60%' }}><span>ASYMPTOMATIC PHASE (PSB)</span></div>
                   <div className="tl-seg s-rv" style={{ flex: '0 0 2%' }}></div>
-                  <div className="tl-seg s-tx" style={{ flex: '0 0 12%' }}><span>TREATMENT</span></div>
-                  <div className="tl-seg s-fu" style={{ flex: '0 0 16%' }}><span>FOLLOW-UP</span></div>
+                  <div className="tl-seg s-tx" style={{ flex: '0 0 4.6%' }}><span>TREATMENT</span></div>
+                  <div className="tl-seg s-fu" style={{ flex: '0 0 23.4%' }}><span>FOLLOW-UP</span></div>
                   <div className="tl-now-marker" style={{ left: `${getTodayPct(patient).toFixed(1)}%` }}></div>
                   <div className="tl-now-label" style={{ left: `${getTodayPct(patient).toFixed(1)}%` }}>Today (Day {patient.studyDay})</div>
                 </div>
@@ -117,8 +127,8 @@ export const PatientDetail = ({
                   <div style={{ flex: '0 0 10%' }}>Screening</div>
                   <div style={{ flex: '0 0 60%' }}>Weeks 1–68</div>
                   <div style={{ flex: '0 0 2%' }}>RV</div>
-                  <div style={{ flex: '0 0 12%' }}>Day 1–14</div>
-                  <div style={{ flex: '0 0 16%' }}>Day 14–42 (EOS)</div>
+                  <div style={{ flex: '0 0 4.6%' }}>Day 1–7</div>
+                  <div style={{ flex: '0 0 23.4%' }}>Day 8–42 (EOS)</div>
                 </div>
               </div>
             </div>
@@ -197,7 +207,7 @@ export const PatientDetail = ({
           <div className="card">
             <div className="card-hdr"><div className="card-title">Patient Info</div></div>
             <div className="info-list">
-              <div className="info-item"><div className="info-l">Status</div><div className="info-v"><span className={`phase-badge ${phBadge}`}>{patient.phaseLabel}</span></div></div>
+              <div className="info-item"><div className="info-l">Status</div><div className="info-v"><span className={`phase-badge ${phBadge}`}>{displayPhaseLabel}</span></div></div>
               <div className="info-item"><div className="info-l">Location</div><div className="info-v">{patient.loc}</div></div>
               <div className="info-item"><div className="info-l">Language</div><div className="info-v">{patient.lang}</div></div>
               <div className="info-item"><div className="info-l">Study Day</div><div className="info-v">Day {patient.studyDay}</div></div>
@@ -208,6 +218,11 @@ export const PatientDetail = ({
           <div className="card">
             <div className="card-hdr"><div className="card-title">Quick Actions</div></div>
             <div className="action-stack">
+              {patient.phaseCode === 'scr' && (
+                <button className="act-btn" onClick={onOpenScreeningOutcome} style={{ color: 'var(--blue)', fontWeight: 500 }}>
+                  <CheckCircle2 size={14} /> Record Screening Outcome
+                </button>
+              )}
               <button className="act-btn"><Phone size={14} /> Call Participant</button>
               <button className="act-btn"><Calendar size={14} /> Schedule Visit</button>
               <button className="act-btn"><FileText size={14} /> Generate Report</button>

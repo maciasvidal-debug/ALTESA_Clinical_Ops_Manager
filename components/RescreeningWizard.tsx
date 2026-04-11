@@ -128,7 +128,7 @@ export const RescreeningWizard = ({
               <div className="wz-sub">ALTESA Study · {patient.id} · Week {Math.floor(patient.studyDay / 7)}</div>
             </div>
           </div>
-          <button className="wz-close" onClick={onClose}><X size={20} /></button>
+          <button aria-label="Close" className="wz-close" onClick={onClose}><X size={20} aria-hidden="true" /></button>
         </div>
         <div className="wz-stepper">
           {steps.map((s, i) => (

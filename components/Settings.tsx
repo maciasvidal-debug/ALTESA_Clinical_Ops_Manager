@@ -11,9 +11,26 @@ interface SettingsProps {
 
 export function Settings({ patients, onClose, onImportQueries }: SettingsProps) {
   const [managerKey, setManagerKey] = useState<string>('');
+  const [crcKeys, setCrcKeys] = useState<{publicKey: string, privateKey: string, signPublicKey: string, signPrivateKey: string, encPublicKey: string, encPrivateKey: string} | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [loadingQueries, setLoadingQueries] = useState(false);
   const [importedKeyName, setImportedKeyName] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Initialize CRC keys
+    const initKeys = async () => {
+      const stored = localStorage.getItem('altesa_crc_keys');
+      if (stored) {
+        setCrcKeys(JSON.parse(stored));
+      } else {
+        const { generateCRCKeys } = await import('@/lib/crypto');
+        const keys = await generateCRCKeys();
+        localStorage.setItem('altesa_crc_keys', JSON.stringify(keys));
+        setCrcKeys(keys);
+      }
+    };
+    initKeys();
+  }, []);
 
   // Tour State
   const [tourStep, setTourStep] = useState<number>(0); // 0 = off, 1 = Import Key, 2 = Download Data, 3 = Upload Queries
@@ -43,11 +60,14 @@ export function Settings({ patients, onClose, onImportQueries }: SettingsProps) 
     
     setDownloading(true);
     try {
-      // Mock CRC Private Key
-      const crcPrivKey = "CRC-PRIV-KEY-LOCAL";
-      const activeKey = managerKey || "IMPORTED-KEY";
+      if (!crcKeys) throw new Error("CRC keys not initialized.");
+      let mgrEncKey = managerKey;
+      try {
+        const parsed = JSON.parse(managerKey);
+        if (parsed.encPublicKey) mgrEncKey = parsed.encPublicKey;
+      } catch(e) {}
       
-      const pkg = await encryptAndSign(patients, activeKey, crcPrivKey);
+      const pkg = await encryptAndSign(patients, mgrEncKey, crcKeys.signPrivateKey);
       
       // Trigger download
       const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
@@ -89,11 +109,18 @@ export function Settings({ patients, onClose, onImportQueries }: SettingsProps) 
 
     setLoadingQueries(true);
     try {
+      if (!crcKeys) throw new Error("CRC keys not initialized.");
       const text = await file.text();
       const pkg = JSON.parse(text);
       
-      // Decrypt using CRC's private key and verify Manager&apos;s signature
-      const data = await verifyAndDecrypt(pkg, 'CRC-PRIV-MOCK', 'MGR-PUB-MOCK');
+      // Decrypt using CRC's private key and verify Manager's signature
+      let mgrSignKey = managerKey;
+      try {
+        const parsed = JSON.parse(managerKey);
+        if (parsed.signPublicKey) mgrSignKey = parsed.signPublicKey;
+      } catch(e) {}
+      
+      const data = await verifyAndDecrypt(pkg, crcKeys.encPrivateKey, mgrSignKey);
       
       onImportQueries(data);
       alert(`Successfully loaded ${data.length} queries.`);

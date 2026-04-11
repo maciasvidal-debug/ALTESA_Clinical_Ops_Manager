@@ -4,8 +4,8 @@ import React, { useState, useMemo } from 'react';
 import { 
   BarChart2, AlertTriangle, CheckCircle2, Clock, 
   Activity, Shield, Calendar, ChevronRight, 
-  Search, Filter, MessageSquare, Lock, FileText,
-  TrendingUp, Map, List, LayoutGrid, Upload, X, Terminal, Download
+  Search, Filter, MessageSquare, Lock, FileText, Key,
+  TrendingUp, Map, List, LayoutGrid, Upload, X, Terminal, Download, LifeBuoy
 } from 'lucide-react';
 import { Patient, countTasks, TODAY, diffDays, fmtHuman } from '@/lib/data';
 import { DLPWrapper } from '@/components/DLPWrapper';
@@ -22,10 +22,60 @@ interface ManagerDashboardProps {
 }
 
 export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, isChecked, onOpenPatient, onImportPatients }: ManagerDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'tracker' | 'risk' | 'queries'>('tracker');
+  const [activeTab, setActiveTab] = useState<'tracker' | 'risk' | 'queries' | 'recovery'>('tracker');
   const [trackerView, setTrackerView] = useState<'board' | 'grid' | 'calendar'>('board');
   const [siteFilter, setSiteFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [managerKeys, setManagerKeys] = useState<{publicKey: string, privateKey: string, signPublicKey: string, signPrivateKey: string, encPublicKey: string, encPrivateKey: string} | null>(null);
+
+  // Recovery Tool State
+  const [recoveryChallenge, setRecoveryChallenge] = useState('');
+  const [generatedResponse, setGeneratedResponse] = useState('');
+
+  // Activation Generator State
+  const [actSiteId, setActSiteId] = useState('');
+  const [actDeviceId, setActDeviceId] = useState('');
+  const [generatedActCode, setGeneratedActCode] = useState('');
+
+  // Master Key Generator State
+  const [newStudyId, setNewStudyId] = useState('ALTESA-2026');
+  const [generatedMasterConfig, setGeneratedMasterConfig] = useState('');
+
+  const handleGenerateActivation = async () => {
+    const { generateActivationCode } = await import('@/lib/security');
+    const code = await generateActivationCode(actSiteId, actDeviceId);
+    setGeneratedActCode(code);
+  };
+
+  const handleGenerateMasterConfig = () => {
+    const secret = 'SEC-' + Math.random().toString(36).substring(2, 15).toUpperCase() + '-' + Date.now();
+    const config = {
+      studyId: newStudyId,
+      secret: secret
+    };
+    setGeneratedMasterConfig(JSON.stringify(config, null, 2));
+  };
+
+  const handleGenerateResponse = async () => {
+    const { generateResponseCode } = await import('@/lib/security');
+    const resp = await generateResponseCode(recoveryChallenge);
+    setGeneratedResponse(resp);
+  };
+
+  React.useEffect(() => {
+    const initKeys = async () => {
+      const stored = localStorage.getItem('altesa_manager_keys');
+      if (stored) {
+        setManagerKeys(JSON.parse(stored));
+      } else {
+        const { generateManagerKeys } = await import('@/lib/crypto');
+        const keys = await generateManagerKeys();
+        localStorage.setItem('altesa_manager_keys', JSON.stringify(keys));
+        setManagerKeys(keys);
+      }
+    };
+    initKeys();
+  }, []);
   
   // Sync Modal State
   const [syncModalOpen, setSyncModalOpen] = useState(false);
@@ -44,6 +94,7 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
       const file = files[i];
       setSyncLogs(prev => [...prev, `[READ] Loading ${file.name}...`]);
       try {
+        if (!managerKeys) throw new Error("Manager keys not initialized.");
         const text = await file.text();
         const pkg = JSON.parse(text);
         
@@ -53,7 +104,16 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
         setSyncLogs(prev => [...prev, `[CRYPTO] Decrypting AES-256-GCM payload...`]);
         await new Promise(r => setTimeout(r, 400));
         
-        const data = await verifyAndDecrypt(pkg, 'MGR-PRIV-MOCK', 'CRC-PUB-MOCK');
+        // In a real app, we would look up the CRC's public key based on the sender ID in the package.
+        // For this prototype, we'll try to load it from local storage if available, or fallback.
+        let crcSignKey = 'CRC-PUB-MOCK';
+        const storedCrcKeys = localStorage.getItem('altesa_crc_keys');
+        if (storedCrcKeys) {
+          const parsed = JSON.parse(storedCrcKeys);
+          if (parsed.signPublicKey) crcSignKey = parsed.signPublicKey;
+        }
+
+        const data = await verifyAndDecrypt(pkg, managerKeys.encPrivateKey, crcSignKey);
         allImported = [...allImported, ...data];
         
         setSyncLogs(prev => [...prev, `[SUCCESS] Decrypted ${data.length} records from ${file.name}.`]);
@@ -168,6 +228,7 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
           <button className={`ftab ${activeTab === 'tracker' ? 'active' : ''}`} style={{ color: activeTab === 'tracker' ? '#fff' : '#94A3B8', background: activeTab === 'tracker' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('tracker')}><Map size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Subject Tracker</button>
           <button className={`ftab ${activeTab === 'risk' ? 'active' : ''}`} style={{ color: activeTab === 'risk' ? '#fff' : '#94A3B8', background: activeTab === 'risk' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('risk')}><TrendingUp size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Risk & Heatmap</button>
           <button className={`ftab ${activeTab === 'queries' ? 'active' : ''}`} style={{ color: activeTab === 'queries' ? '#fff' : '#94A3B8', background: activeTab === 'queries' ? '#334155' : 'transparent', border: 'none', position: 'relative', zIndex: tourStep === 3 ? 1000 : 1, boxShadow: tourStep === 3 ? '0 0 0 2px #8B5CF6' : 'none' }} onClick={() => setActiveTab('queries')}><MessageSquare size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Queries</button>
+          <button className={`ftab ${activeTab === 'recovery' ? 'active' : ''}`} style={{ color: activeTab === 'recovery' ? '#fff' : '#94A3B8', background: activeTab === 'recovery' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('recovery')}><LifeBuoy size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Recovery Tool</button>
         </div>
         <div className="hdr-right" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button 
@@ -192,7 +253,15 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
               className="btn btn-secondary" 
               style={{ minHeight: '32px', padding: '6px 12px', fontSize: '13px', background: 'transparent', color: '#94A3B8', border: '1px solid #334155' }} 
               onClick={() => {
-                const blob = new Blob(["MGR-PUB-KEY-MOCK-8A9B2C"], { type: 'text/plain' });
+                if (!managerKeys) {
+                  alert("Manager keys not initialized.");
+                  return;
+                }
+                const keyData = JSON.stringify({
+                  encPublicKey: managerKeys.encPublicKey,
+                  signPublicKey: managerKeys.signPublicKey
+                });
+                const blob = new Blob([keyData], { type: 'text/plain' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -277,6 +346,7 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
             <div style={{ position: 'relative' }}>
               <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
               <input 
+                aria-label="Search patients"
                 type="text" 
                 placeholder="Search patients..." 
                 value={searchQuery}
@@ -465,6 +535,152 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
           </div>
         )}
 
+        {/* Recovery Tool */}
+        {activeTab === 'recovery' && (
+          <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+            <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '32px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                <div style={{ background: '#F0F9FF', padding: '12px', borderRadius: '12px' }}>
+                  <LifeBuoy size={24} color="#0EA5E9" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#0F172A', margin: 0 }}>PIN Recovery Generator</h3>
+                  <p style={{ fontSize: '14px', color: '#64748B', margin: '4px 0 0 0' }}>Generate a response code for a Coordinator challenge</p>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: '#334155', display: 'block', marginBottom: '8px' }}>Challenge Code (from Coordinator)</label>
+                <input 
+                  type="text" 
+                  placeholder="Enter 6-digit challenge"
+                  value={recoveryChallenge}
+                  onChange={(e) => setRecoveryChallenge(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '16px', outline: 'none', transition: 'border-color 0.2s' }}
+                />
+              </div>
+
+              <button 
+                className="btn btn-primary" 
+                style={{ width: '100%', padding: '12px', fontSize: '14px', background: '#0EA5E9', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600 }}
+                disabled={recoveryChallenge.length < 6}
+                onClick={handleGenerateResponse}
+              >
+                Generate Response Code
+              </button>
+
+              {generatedResponse && (
+                <div style={{ marginTop: '32px', padding: '24px', background: '#F0FDF4', borderRadius: '12px', border: '1px solid #BBF7D0', textAlign: 'center' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#166534', marginBottom: '8px', letterSpacing: '0.05em' }}>RESPONSE CODE FOR COORDINATOR</div>
+                  <div style={{ fontSize: '32px', fontWeight: 700, color: '#15803D', letterSpacing: '4px' }}>{generatedResponse}</div>
+                  <p style={{ fontSize: '12px', color: '#166534', marginTop: '12px', opacity: 0.8 }}>Provide this code to the Coordinator to unlock their session.</p>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: '24px', padding: '16px', background: '#FEF3C7', borderRadius: '8px', border: '1px solid #FDE68A', display: 'flex', gap: '12px' }}>
+              <Shield size={20} color="#B45309" style={{ flexShrink: 0 }} />
+              <div style={{ fontSize: '13px', color: '#92400E', lineHeight: 1.5 }}>
+                <strong>Security Protocol:</strong> Always verify the identity of the Coordinator via a secondary channel (voice/video) before providing a recovery code.
+              </div>
+            </div>
+
+            {/* Activation Generator */}
+            <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '32px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', marginTop: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                <div style={{ background: '#F5F3FF', padding: '12px', borderRadius: '12px' }}>
+                  <Shield size={24} color="#7C3AED" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#0F172A', margin: 0 }}>Site Activation Generator</h3>
+                  <p style={{ fontSize: '14px', color: '#64748B', margin: '4px 0 0 0' }}>Authorize a new device/site instance</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#334155', display: 'block', marginBottom: '8px' }}>Site ID</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. SITE-A"
+                    value={actSiteId}
+                    onChange={(e) => setActSiteId(e.target.value.toUpperCase())}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '14px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: 600, color: '#334155', display: 'block', marginBottom: '8px' }}>Device Hardware ID</label>
+                  <input 
+                    type="text" 
+                    placeholder="DEV-XXXX..."
+                    value={actDeviceId}
+                    onChange={(e) => setActDeviceId(e.target.value.toUpperCase())}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '14px', fontFamily: 'monospace' }}
+                  />
+                </div>
+              </div>
+
+              <button 
+                className="btn btn-primary" 
+                style={{ width: '100%', padding: '12px', fontSize: '14px', background: '#7C3AED', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600 }}
+                disabled={!actSiteId || !actDeviceId}
+                onClick={handleGenerateActivation}
+              >
+                Generate Activation Code
+              </button>
+
+              {generatedActCode && (
+                <div style={{ marginTop: '24px', padding: '20px', background: '#F5F3FF', borderRadius: '12px', border: '1px solid #DDD6FE', textAlign: 'center' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#5B21B6', marginBottom: '8px' }}>ACTIVATION CODE FOR SITE</div>
+                  <div style={{ fontSize: '24px', fontWeight: 700, color: '#4C1D95', fontFamily: 'monospace', letterSpacing: '2px' }}>{generatedActCode}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Master Key Generator (Developer/Admin Tool) */}
+            <div style={{ background: '#F8FAFC', borderRadius: '12px', border: '1px dashed #CBD5E1', padding: '32px', marginTop: '48px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                <div style={{ background: '#E2E8F0', padding: '12px', borderRadius: '12px' }}>
+                  <Key size={24} color="#475569" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#0F172A', margin: 0 }}>Master Key File Generator</h3>
+                  <p style={{ fontSize: '14px', color: '#64748B', margin: '4px 0 0 0' }}>Developer Tool: Generate a new Study Configuration</p>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: '#334155', display: 'block', marginBottom: '8px' }}>Study ID</label>
+                <input 
+                  type="text" 
+                  value={newStudyId}
+                  onChange={(e) => setNewStudyId(e.target.value)}
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '14px' }}
+                />
+              </div>
+
+              <button 
+                className="btn" 
+                style={{ width: '100%', padding: '12px', background: '#475569', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600 }}
+                onClick={handleGenerateMasterConfig}
+              >
+                Generate New Master Key File Content
+              </button>
+
+              {generatedMasterConfig && (
+                <div style={{ marginTop: '24px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>COPY THIS JSON TO DISTRIBUTE TO MANAGERS:</div>
+                  <pre style={{ background: '#fff', padding: '16px', borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '11px', overflowX: 'auto', color: '#0F172A' }}>
+                    {generatedMasterConfig}
+                  </pre>
+                  <p style={{ fontSize: '12px', color: '#64748B', marginTop: '12px' }}>
+                    <strong>Warning:</strong> This file contains the cryptographic seed for the entire study. Keep it secure.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         {/* Queries */}
         {activeTab === 'queries' && (
           <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
@@ -484,7 +700,16 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
                   style={{ padding: '6px 12px', fontSize: '12px', background: '#8B5CF6', color: '#fff', border: 'none' }}
                   onClick={async () => {
                     try {
-                      const pkg = await encryptAndSign(filteredQueries, 'CRC-PUB-MOCK', 'MGR-PRIV-MOCK');
+                      if (!managerKeys) throw new Error("Manager keys not initialized.");
+                      
+                      let crcEncKey = 'CRC-PUB-MOCK';
+                      const storedCrcKeys = localStorage.getItem('altesa_crc_keys');
+                      if (storedCrcKeys) {
+                        const parsed = JSON.parse(storedCrcKeys);
+                        if (parsed.encPublicKey) crcEncKey = parsed.encPublicKey;
+                      }
+
+                      const pkg = await encryptAndSign(filteredQueries, crcEncKey, managerKeys.signPrivateKey);
                       const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
@@ -563,8 +788,8 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
                 </div>
               </div>
               {!isSyncing && (
-                <button onClick={() => setSyncModalOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#94A3B8' }}>
-                  <X size={20} />
+                <button aria-label="Close" onClick={() => setSyncModalOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#94A3B8' }}>
+                  <X size={20} aria-hidden="true" />
                 </button>
               )}
             </div>
@@ -573,6 +798,7 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
               {/* File Drop Zone */}
               <div style={{ border: '2px dashed #CBD5E1', borderRadius: '12px', padding: '40px 24px', textAlign: 'center', background: '#F8FAFC', marginBottom: '24px', position: 'relative', transition: 'all 0.2s' }}>
                 <input 
+                  aria-label="Upload encrypted package"
                   type="file" 
                   multiple 
                   accept=".enc" 

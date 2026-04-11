@@ -11,7 +11,7 @@ import {
   Check, ArrowRight, Delete, X, Info, User, Globe, Mail, Hospital, Clock,
   HelpCircle, Phone, Activity, ChevronRight, ArrowUp, ArrowDown, Link,
   ChevronDown, Plus, FileEdit, ArrowLeft, Circle, FileText, BarChart2,
-  CheckCircle2, Calendar, Flag, Microscope, Home, Wind, Pill, MessageSquare
+  CheckCircle2, CheckCircle, Calendar, Flag, Microscope, Home, Wind, Pill, MessageSquare
 } from 'lucide-react';
 
 // Components
@@ -26,6 +26,7 @@ import { DailyBriefing } from '@/components/DailyBriefing';
 import { Sparkline } from '@/components/Sparkline';
 import { AddPatientModal } from '@/components/AddPatientModal';
 import { EditPatientModal } from '@/components/EditPatientModal';
+import { ScreeningOutcomeModal } from '@/components/ScreeningOutcomeModal';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { ManagerDashboard } from '@/components/ManagerDashboard';
 import { Settings } from '@/components/Settings';
@@ -64,7 +65,6 @@ export default function App() {
   const [newPatientId, setNewPatientId] = useState('');
   const [newPatientName, setNewPatientName] = useState('');
   const [newPatientLang, setNewPatientLang] = useState('English');
-  const [newPatientScreeningDate, setNewPatientScreeningDate] = useState<string>(fmtISO(TODAY));
   const [recentIds, setRecentIds] = useState<string[]>([]);
   const taskListRef = useRef<HTMLDivElement>(null);
   
@@ -72,9 +72,8 @@ export default function App() {
   const [rescreeningStep, setRescreeningStep] = useState(1);
   const [rescreeningData, setRescreeningData] = useState<any>(null);
   const [rescreeningChks, setRescreeningChks] = useState<Record<number, Set<number>>>({});
-
-  const [completeScreeningOpen, setCompleteScreeningOpen] = useState(false);
-  const [psbDayOneDate, setPsbDayOneDate] = useState<string>('');
+  
+  const [screeningOutcomeOpen, setScreeningOutcomeOpen] = useState(false);
   
   const [dashFilter, setDashFilter] = useState<'all' | 'crit' | 'warn' | 'routine'>('all');
   const [activeTab, setActiveTab] = useState<'checklist' | 'documents'>('checklist');
@@ -91,7 +90,8 @@ export default function App() {
   const [cmdOpen, setCmdOpen] = useState(false);
   const [cmdQ, setCmdQ] = useState('');
   const [taskConfirm, setTaskConfirm] = useState<{pid: string, task: any} | null>(null);
-  const [spiAttested, setSpiAttested] = useState(false);
+  const [attestationChecked, setAttestationChecked] = useState(false);
+  const [taskDataValue, setTaskDataValue] = useState('');
   const [wzCheckConfirm, setWzCheckConfirm] = useState<{step: number, index: number} | null>(null);
   const [editTask, setEditTask] = useState<{pid: string, task: any} | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
@@ -116,6 +116,19 @@ export default function App() {
   const [editPatientData, setEditPatientData] = useState<{name: string, lang: string, loc: string} | null>(null);
 
   const [toasts, setToasts] = useState<{id: number, msg: string, type: string}[]>([]);
+  const [isActivated, setIsActivated] = useState<boolean>(false);
+  const [isStudyInit, setIsStudyInit] = useState<boolean>(false);
+  const [hasPin, setHasPin] = useState<boolean>(false);
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+    if (typeof window !== 'undefined') {
+      setIsActivated(localStorage.getItem('altesa_activated') === 'true');
+      setIsStudyInit(!!localStorage.getItem('altesa_study_secret'));
+      setHasPin(!!localStorage.getItem('altesa_crc_pin'));
+    }
+  }, []);
   const toastIdRef = useRef(0);
 
   const getRescreeningStatus = (p: Patient) => {
@@ -138,42 +151,6 @@ export default function App() {
     });
   };
 
-  const handleCompleteScreening = () => {
-    if (!selPatientId) return;
-
-    const d = new Date(psbDayOneDate + 'T12:00:00');
-
-    setPatients(prev => prev.map(p => {
-      if (p.id !== selPatientId) return p;
-
-      return {
-        ...p,
-        phase: 'PSB',
-        phaseCode: 'psb',
-        phaseLabel: 'Asymptomatic Phase · Week 1',
-        psbStartDate: d,
-        studyDay: diffDays(d, TODAY),
-        nextVisit: addDays(d, 7),
-        nextVisitLabel: 'PSB Check-in (Week 1)',
-        tasks: {
-          q: [
-            { code: 'DTQ', label: 'Daily Trigger Questionnaire', icon: '🔔', done: false, note: 'Daily during PSB' },
-            { code: 'ERS', label: 'E-RS / PGIS (EXACT)', icon: '📋', done: false, note: 'Daily during PSB' },
-            { code: 'WURSS', label: 'WURSS-11', icon: '📋', done: false, note: 'Daily during PSB' },
-          ],
-          pr: [],
-          l: [],
-          ad: [
-            { code: 'PRN', label: 'COPD PRN Inhaler Use', icon: '💨', done: false, note: 'Collected with E-RS' },
-          ]
-        }
-      };
-    }));
-
-    setCompleteScreeningOpen(false);
-    showToast('Screening completed and advanced to PSB', 'ok');
-  };
-
   const handleCompleteRescreening = () => {
     if (!selPatientId || !rescreeningData) return;
     setPatients(prev => prev.map(p => {
@@ -189,13 +166,87 @@ export default function App() {
     showToast(`Rescreening for ${rescreeningData.id} completed successfully`, 'ok');
   };
 
-  const showToast = (msg: string, type: string = 'ok') => {
+  const handleScreeningOutcome = (outcome: 'success' | 'failure', icfDate: Date, psbStartDate?: Date, reason?: string) => {
+    setPatients(prev => prev.map(p => {
+      if (p.id === selPatientId) {
+        if (outcome === 'success') {
+          return {
+            ...p,
+            screeningDate: icfDate,
+            screeningOutcome: 'success',
+            psbStartDate: psbStartDate,
+            phase: 'PSB',
+            phaseCode: 'psb',
+            phaseLabel: 'Asymptomatic Phase · Week 1',
+            studyDay: 1,
+            nextVisit: addDays(psbStartDate!, 28),
+            nextVisitLabel: 'Monthly call (Day 28)',
+            nextVisitWindow: 5,
+            tasks: {
+              q: [
+                { code: 'DTQ', label: 'Daily Trigger Questionnaire', icon: '🔔', done: false, note: 'Daily during PSB. Triggers RV Protocol if positive.', dueDate: psbStartDate },
+                { code: 'ERS', label: 'E-RS / PGIS (EXACT)', icon: '📋', done: false, note: 'Daily during PSB. PGIS at each E-RS administration (fn. i)', dueDate: psbStartDate },
+                { code: 'WURSS', label: 'WURSS-11', icon: '📋', done: false, note: 'Daily during PSB (fn. i)', dueDate: psbStartDate },
+                { code: 'PRN', label: 'COPD PRN Inhaler Use', icon: '💨', done: false, note: 'Collected with E-RS', dueDate: psbStartDate },
+              ],
+              pr: [],
+              l: [],
+              ad: [
+                { code: 'MC', label: 'Monthly Phone/Telehealth Call', icon: '📞', done: false, urgent: true, note: 'Due: Week 4 (Day 28). Discuss: comorbidities, COPD meds, infections, hospitalisations (fn. m)', subcat: 'fup', dueDate: addDays(psbStartDate!, 28) },
+                { code: 'CMED', label: 'Concomitant Medications — record any changes', icon: '💊', done: false, note: 'Document new/changed ConMeds since last contact (fn. l)', dueDate: addDays(psbStartDate!, 28), subcat: 'fup' },
+              ]
+            }
+          };
+        } else {
+          return {
+            ...p,
+            screeningDate: icfDate,
+            screeningOutcome: 'failure',
+            screeningFailureReason: reason,
+            phase: 'SCREEN FAILURE',
+            phaseCode: 'fail',
+            phaseLabel: 'Screen Failure',
+            nextVisit: icfDate,
+            nextVisitLabel: 'N/A',
+            tasks: { q: [], pr: [], l: [], ad: [] }
+          };
+        }
+      }
+      return p;
+    }));
+    setScreeningOutcomeOpen(false);
+    showToast(`Screening outcome recorded for ${selPatientId}`, outcome === 'success' ? 'ok' : 'warn');
+  };
+
+  const handleAbortProtocol = () => {
+    setPatients(prev => prev.map(p => {
+      if (p.id === selPatientId) {
+        return {
+          ...p,
+          dtqPos: false,
+          alert: null,
+          phase: 'EARLY TERMINATION',
+          phaseCode: 'et',
+          phaseLabel: 'Early Termination (Randomization Failure)',
+          nextVisitLabel: 'N/A',
+          tasks: { q: [], pr: [], l: [], ad: [] }
+        };
+      }
+      return p;
+    }));
+    setWzOpen(false);
+    setWzStep(0);
+    setWzChks({});
+    showToast(`Patient ${selPatientId} Early Terminated due to Randomization Failure`, 'warn');
+  };
+
+  const showToast = useCallback((msg: string, type: string = 'ok') => {
     const id = ++toastIdRef.current;
     setToasts(prev => [...prev, { id, msg, type }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 2800);
-  };
+  }, []);
 
   const handleDLPViolation = (action: string) => {
     showToast(`DLP Policy: ${action === 'copy' ? 'Copying' : action === 'cut' ? 'Cutting' : 'Dragging'} sensitive patient data is disabled to prevent data leakage.`, 'dlp-alert');
@@ -313,7 +364,6 @@ export default function App() {
     });
 
     // Check for new notifications to trigger "email"
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNotifications(prev => {
       const prevIds = new Set(prev.map(n => n.id));
       newNotifs.forEach(n => {
@@ -337,41 +387,55 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [screen]);
 
-  const handleLoginSuccess = () => {
-    if (pin === '9999' || pin === '999999' || pin === '99999999') {
-      setRole('manager');
-      setScreen('manager_dashboard');
-    } else {
-      setRole('coordinator');
-      setScreen('dashboard');
-    }
+  const handleLoginSuccess = useCallback(() => {
+    // In production, role is determined by the specific key used to decrypt the vault
+    // For this prototype, we'll use a role selector or specific PIN ranges if needed,
+    // but we remove the hardcoded "9999" bypass.
+    setRole('coordinator');
+    setScreen('dashboard');
+    
     if (typeof window !== 'undefined' && !localStorage.getItem('altesa_briefed_today')) {
       setBriefingOpen(true);
       localStorage.setItem('altesa_briefed_today', fmtISO(TODAY));
     }
-  };
+  }, []);
 
-  const handlePin = (k: string) => {
+  const handlePin = useCallback((k: string) => {
     if (k === 'del') {
       setPin(prev => prev.slice(0, -1));
       setPinErr('');
+    } else if (k.startsWith('manager_unlock:')) {
+      const pass = k.split(':')[1];
+      showToast('Manager Unlock Triggered', 'info');
+      if (pass.length >= 12) {
+        setRole('manager');
+        setScreen('manager_dashboard');
+        showToast('Manager Vault Decrypted', 'ok');
+      } else {
+        showToast('Passphrase too short', 'error');
+      }
+    } else if (k === 'reset_pin') {
+      setPin('');
+      setPinErr('');
+      localStorage.removeItem('altesa_crc_pin');
+      setHasPin(false);
+      showToast('Recovery Successful. Please enter a new PIN.', 'ok');
     } else if (k === 'go') {
-      if (pin.length >= 4) {
+      const storedPin = localStorage.getItem('altesa_crc_pin');
+      if (pin === storedPin) {
         setPinErr('');
         handleLoginSuccess();
       } else {
-        setPinErr('Minimum 4 digits required');
+        setPinErr('Invalid PIN');
+        setPin('');
       }
     } else {
       if (pin.length < 8) {
         setPin(prev => prev + k);
         setPinErr('');
       }
-      if (pin.length + 1 === 8) {
-        setTimeout(() => handleLoginSuccess(), 200);
-      }
     }
-  };
+  }, [pin, handleLoginSuccess, showToast]);
 
   const handleDTQResult = (pid: string, isPos: boolean) => {
     setPatients(prev => prev.map(p => {
@@ -394,16 +458,7 @@ export default function App() {
         setCdStart(Date.now() - 3 * 3600000); // Start countdown
         setWzOpen(true); // Open wizard
         showToast('DTQ POSITIVE: RV Protocol Activated', 'crit');
-        return {
-          ...p,
-          dtqPos: true,
-          alert: 'DTQ_POSITIVE',
-          phase: 'RV INFECTION',
-          phaseCode: 'rv',
-          phaseLabel: 'RV Protocol Active · Day 1',
-          rvInfectionDate: TODAY,
-          tasks: updatedTasks
-        };
+        return { ...p, dtqPos: true, alert: 'DTQ_POSITIVE', tasks: updatedTasks };
       } else {
         showToast('DTQ Negative: Patient remains in PSB', 'ok');
         return { ...p, dtqPos: false, alert: null, tasks: updatedTasks };
@@ -420,9 +475,6 @@ export default function App() {
     });
   };
 
-  const [overrideTask, setOverrideTask] = useState<{pid: string, task: any} | null>(null);
-  const [overrideReason, setOverrideReason] = useState('');
-
   const toggleCheck = (pid: string, task: any) => {
     const code = task.code;
     const currentlyChecked = isChecked(pid, code);
@@ -430,10 +482,11 @@ export default function App() {
     // If we are marking as complete (checking), show confirmation
     if (!currentlyChecked) {
       if (isBlocked(pid, task)) {
-        // Smart Task / QbD Override Flow
-        setOverrideTask({ pid, task });
+        showToast(`Cannot complete ${task.label}: Dependencies not met`, 'warn');
         return;
       }
+      setAttestationChecked(false);
+      setTaskDataValue('');
       setTaskConfirm({ pid, task });
       return;
     }
@@ -442,6 +495,28 @@ export default function App() {
   };
 
   const performToggle = (pid: string, code: string) => {
+    const isChecking = !isChecked(pid, code);
+
+    setPatients(prev => prev.map(p => {
+      if (p.id === pid) {
+        const updatedTasks = { ...p.tasks };
+        Object.keys(updatedTasks).forEach(cat => {
+          updatedTasks[cat] = updatedTasks[cat].map((t: any) => {
+            if (t.code === code) {
+              return { 
+                ...t, 
+                attested: isChecking ? attestationChecked : false,
+                dataValue: isChecking ? taskDataValue : undefined
+              };
+            }
+            return t;
+          });
+        });
+        return { ...p, tasks: updatedTasks };
+      }
+      return p;
+    }));
+
     setChkd(prev => {
       const next = { ...prev };
       if (!next[pid]) next[pid] = new Set();
@@ -458,97 +533,47 @@ export default function App() {
     });
   };
 
-  const handleAddPatient = (e: React.FormEvent) => {
-    e.preventDefault();
-    setModalErr('');
-    
-    const id = newPatientId.trim().toUpperCase();
-    const name = newPatientName.trim();
-    
-    if (!id || !name) {
-      setModalErr('All fields are required');
-      return;
-    }
-    
-    if (name.length < 3) {
-      setModalErr('Please enter a full name (at least 3 characters)');
-      return;
-    }
-    
-    // PII / DNI Validation
-    const piiRegex = /\d{7,}/;
-    if (piiRegex.test(id) || piiRegex.test(name)) {
-      setModalErr('It looks like you are trying to enter Personally Identifiable Information (PII). To comply with FDA and ICH GCP regulations, please do not enter real patient data.');
-      return;
-    }
-
-    // Six Sigma - Defect Reduction: dynamic strict format (configurable per sponsor)
-    const ID_REGEX = /^[A-Z]{3,6}-\d{3}$/;
-    if (!ID_REGEX.test(id)) {
-      setModalErr('Invalid format. ID must follow the sponsor nomenclature (e.g., ALTESA-002).');
-      return;
-    }
-    
-    // Cross-validation
-    if (patients.some(p => p.id === id)) {
-      setModalErr(`Patient ID ${id} already exists in the system`);
-      return;
-    }
-    
-    const screeningDateVal = new Date(newPatientScreeningDate + 'T12:00:00');
-
+  const handleAddPatient = (id: string, name: string, lang: string, consentDate: Date) => {
     const newPatient: Patient = {
-      id,
-      name,
-      phase: 'SCREENING',
-      phaseCode: 'scr',
-      phaseLabel: 'Screening · Day 0',
-      studyDay: diffDays(screeningDateVal, TODAY),
-      loc: 'CLINIC',
-      lang: newPatientLang,
-      alert: null,
-      screeningDate: screeningDateVal,
+      id, name, lang,
+      phase: 'SCREENING', phaseCode: 'scr', phaseLabel: 'Screening · Day 0',
+      loc: 'CLINIC', alert: null,
+      screeningDate: consentDate,
+      consentDate: consentDate,
       tasks: {
         q: [
-          { code: 'CAT', label: 'CAT — COPD Assessment Test', icon: '📋', done: false, note: 'Screening and Rescreening visits only (Table 1)', dueDate: TODAY },
-          { code: 'IC', label: 'Informed Consent', icon: '📝', done: true, note: 'New ICF required only if updated version available (fn. a)', dueDate: TODAY },
+          { code: 'CAT', label: 'CAT — COPD Assessment Test', icon: '📋', done: false, note: 'Screening and Rescreening visits only (Table 1)', dueDate: consentDate },
+          { code: 'IC', label: 'Informed Consent', icon: '📝', done: true, note: 'Signed on ' + fmtISO(consentDate) },
         ],
         pr: [
-          { code: 'OSC', label: 'Oscillometry', icon: '🫁', done: false, seq: true, note: 'Perform BEFORE spirometry at all visits with both (fn. f)', dueDate: TODAY },
-          { code: 'SPI', label: 'Spirometry (PRE & POST)', icon: '🫁', done: false, note: 'Washout: short-acting BD 4–6 h · BID 12 h · QD 24 h (fn. f). Pre- and post-SABD at Screening.', dueDate: TODAY },
-          { code: 'ECG', label: 'ECG (12-lead)', icon: '🫀', done: false, note: 'Single ECG at Screening. Collect PRIOR to blood draw (fn. e)', dueDate: TODAY },
-          { code: 'VS', label: 'Vital Signs', icon: '🩺', done: false, note: 'BP, HR, body temp, respiratory rate. Seated ≥ 5 min (fn. d)', dueDate: TODAY },
-          { code: 'PE', label: 'Physical Exam (incl. height — Screening only)', icon: '🩺', done: false, note: 'Full exam including height (Screening only). Subsequent: limited, symptom-directed, include weight (fn. c)', dueDate: TODAY },
+          { code: 'OSC', label: 'Oscillometry', icon: '🫁', done: false, seq: true, note: 'Perform BEFORE spirometry at all visits with both (fn. f)', dueDate: consentDate },
+          { code: 'SPI', label: 'Spirometry (PRE & POST)', icon: '🫁', done: false, note: 'Pre- and post-SABD at Screening.', dependsOn: ['OSC'], dueDate: consentDate },
+          { code: 'ECG', label: 'ECG (12-lead)', icon: '🫀', done: false, note: 'Collect PRIOR to blood draw (fn. e)', dueDate: consentDate },
+          { code: 'VS', label: 'Vital Signs', icon: '🩺', done: false, note: 'BP, HR, body temp, respiratory rate. Seated ≥ 5 min (fn. d)', dueDate: consentDate },
+          { code: 'PE', label: 'Physical Exam (incl. height — Screening only)', icon: '🩺', done: false, note: 'Full exam including height (Screening only).', dueDate: consentDate },
         ],
         l: [
-          { code: 'CSL', label: 'Central Safety Labs — Chemistry / Haematology / Urinalysis', icon: '🧪', done: false, note: 'Full panel at Screening. Urinalysis: Screening only; subsequent visits: only if clinically indicated', dueDate: TODAY },
-          { code: 'PT', label: 'Pregnancy Test (blood — WOCBP only)', icon: '🧪', done: false, note: 'Blood at Screening. Urine at Day 1 Pre-Dose. Blood at Day 28 FUP (fn. a)', dueDate: TODAY },
+          { code: 'CSL', label: 'Central Safety Labs — Chemistry / Haematology / Urinalysis', icon: '🧪', done: false, note: 'Full panel at Screening.', dependsOn: ['ECG'], dueDate: consentDate },
+          { code: 'PT', label: 'Pregnancy Test (blood — WOCBP only)', icon: '🧪', done: false, note: 'Blood at Screening.', dueDate: consentDate },
         ],
         ad: [
-          { code: 'DEMO', label: 'Demographics', icon: '📄', done: false, dueDate: TODAY, subcat: 'screening' },
-          { code: 'MSH', label: 'Medical & Smoking History', icon: '📄', done: false, note: 'Document as medical history until Day 1 dosing. COPD exacerbations: separate eCRF page (fn. b)', dueDate: TODAY, subcat: 'screening' },
-          { code: 'ELG', label: 'Assess Eligibility Criteria', icon: '✅', done: false, note: 'Inclusion and Exclusion. Rescreening: Exclusion criteria only (fn. a)', dueDate: TODAY, subcat: 'screening' },
-          { code: 'COPH', label: 'COPD History & Medications', icon: '📄', done: false, dueDate: TODAY, subcat: 'screening' },
-          { code: 'CMED', label: 'Concomitant Medications', icon: '💊', done: false, note: 'Reviewed by medically qualified investigator at Screening (fn. l)', dueDate: TODAY, subcat: 'screening' },
-          { code: 'TRAIN', label: 'Train Participant on Study Procedures', icon: '🎓', done: false, note: 'Includes ePRO, DTQ, home virology testing instructions', dueDate: TODAY, subcat: 'screening' },
+          { code: 'DEMO', label: 'Demographics', icon: '📄', done: true, subcat: 'screening' },
+          { code: 'MSH', label: 'Medical & Smoking History', icon: '📄', done: false, note: 'Document as medical history until Day 1 dosing.', subcat: 'screening' },
+          { code: 'ELG', label: 'Assess Eligibility Criteria', icon: '✅', done: false, note: 'Inclusion and Exclusion.', subcat: 'screening' },
+          { code: 'COPH', label: 'COPD History & Medications', icon: '📄', done: false, subcat: 'screening' },
+          { code: 'CMED', label: 'Concomitant Medications', icon: '💊', done: false, note: 'Reviewed by medically qualified investigator at Screening (fn. l)', subcat: 'screening' },
+          { code: 'TRAIN', label: 'Train Participant on Study Procedures', icon: '🎓', done: false, note: 'Includes ePRO, DTQ, home virology testing instructions', subcat: 'screening' },
         ]
       },
-      ers: [],
-      psb: null,
-      psbRecords: 0,
-      nextVisit: addDays(screeningDateVal, 21),
-      nextVisitLabel: 'PSB Start — Projected (Max 21d)',
-      documents: [],
+      ers: [], psb: null, psbRecords: 0,
+      nextVisit: addDays(consentDate, 21), nextVisitLabel: 'PSB Start (Theoretical)',
+      nextVisitWindow: undefined,
+      documents: []
     };
     
-    setPatients(prev => [...prev, newPatient]);
+    setPatients(prev => [newPatient, ...prev]);
     setAddPatientOpen(false);
-    setNewPatientId('');
-    setNewPatientName('');
-    setNewPatientLang('English');
-    setNewPatientScreeningDate(fmtISO(TODAY));
-    setModalErr('');
-    showToast(`Patient ${newPatient.id} added successfully`, 'ok');
+    showToast(`Patient ${id} added successfully`, 'ok');
   };
 
   const handleUpdatePatient = (e: React.FormEvent) => {
@@ -616,92 +641,55 @@ export default function App() {
     });
   };
 
+  // Prevent hydration mismatch
+  if (!hasMounted) return null;
+
   // Auth Screen
   if (screen === 'auth') {
     return (
-      <div className="screen auth-wrap">
-        <div className="auth-card">
-          <div className="auth-wordmark">ALTE<em>SA</em></div>
-          <div className="auth-sub">VPV Study · {authMode === 'crc' ? 'Coordinator' : 'Manager'} Platform<br/>PBKDF2-SHA256 · AES-256-GCM · No backend</div>
-          
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', background: '#F1F5F9', padding: '4px', borderRadius: '8px' }}>
-            <button 
-              onClick={() => { setAuthMode('crc'); setPin(''); setPinErr(''); }}
-              style={{ flex: 1, padding: '8px', border: 'none', background: authMode === 'crc' ? '#fff' : 'transparent', color: authMode === 'crc' ? '#0F172A' : '#64748B', borderRadius: '4px', fontWeight: 600, boxShadow: authMode === 'crc' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer' }}
-            >
-              Coordinator
-            </button>
-            <button 
-              onClick={() => { setAuthMode('manager'); setPassphrase(''); setPinErr(''); }}
-              style={{ flex: 1, padding: '8px', border: 'none', background: authMode === 'manager' ? '#fff' : 'transparent', color: authMode === 'manager' ? '#0F172A' : '#64748B', borderRadius: '4px', fontWeight: 600, boxShadow: authMode === 'manager' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer' }}
-            >
-              Manager
-            </button>
-          </div>
-
-          {authMode === 'crc' ? (
-            <>
-              <div className="pin-track">
-                {Array(8).fill(0).map((_, i) => (
-                  <div key={i} className={`pin-dot ${i < pin.length ? 'on' : ''}`}></div>
-                ))}
-              </div>
-              {pinErr ? <div className="pin-hint err">{pinErr}</div> :
-               pin.length > 0 && pin.length < 4 ? <div className="pin-hint ok">{4 - pin.length} more digit{4 - pin.length === 1 ? '' : 's'} needed</div> :
-               <div className="pin-hint ok">Enter your coordinator PIN</div>}
-              <div className="keypad">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, '', '0', '⌫'].map((k, i) => {
-                  if (k === '') return <div key={i}></div>;
-                  if (k === '⌫') return <button key={i} className="kk del" onClick={() => handlePin('del')}><Delete size={16} style={{display:'inline', verticalAlign:'text-bottom'}}/> Del</button>;
-                  return <button key={i} className="kk" onClick={() => handlePin(k.toString())}>{k}</button>;
-                })}
-              </div>
-              <button className="kk go" onClick={() => handlePin('go')} disabled={pin.length < 4}>Unlock <ArrowRight size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/></button>
-            </>
-          ) : (
-            <>
-              <div style={{ marginBottom: '24px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#64748B', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Manager Passphrase</label>
-                <input 
-                  type="password" 
-                  value={passphrase}
-                  onChange={(e) => setPassphrase(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && passphrase.length >= 12) {
-                      setRole('manager');
-                      setScreen('manager_dashboard');
-                    }
-                  }}
-                  placeholder="Enter strong passphrase..."
-                  style={{ width: '100%', padding: '12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', outline: 'none', color: '#0F172A' }}
-                />
-                {pinErr ? <div className="pin-hint err" style={{ marginTop: '8px' }}>{pinErr}</div> :
-                 passphrase.length > 0 && passphrase.length < 12 ? <div className="pin-hint err" style={{ marginTop: '8px' }}>Passphrase must be at least 12 characters</div> :
-                 <div className="pin-hint ok" style={{ marginTop: '8px' }}>Requires strong passphrase to decrypt Manager Key</div>}
-              </div>
-              <button 
-                className="kk go" 
-                onClick={() => {
-                  if (passphrase.length >= 12) {
-                    setRole('manager');
-                    setScreen('manager_dashboard');
-                  } else {
-                    setPinErr('Passphrase too short.');
-                  }
-                }} 
-                disabled={passphrase.length < 12}
-              >
-                Unlock Dashboard <ArrowRight size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/>
-              </button>
-            </>
-          )}
-          
-          <div className="auth-note">
-            <strong>Prototype mode</strong> — {authMode === 'crc' ? 'any PIN of ≥ 4 digits unlocks the demo.' : 'any passphrase ≥ 12 chars unlocks the demo.'}
-            Production: 310,000-iteration PBKDF2 key derivation + 8 single-use recovery codes.
-          </div>
-        </div>
-      </div>
+      <Auth 
+        pin={pin} 
+        pinErr={pinErr} 
+        onPin={handlePin} 
+        onRecovery={async (challenge, response) => {
+          const { validateResponse } = await import('@/lib/security');
+          return await validateResponse(challenge, response);
+        }}
+        isActivated={isActivated}
+        isStudyInit={isStudyInit}
+        onInitStudy={async (configJson) => {
+          const { initializeStudyConfig } = await import('@/lib/security');
+          const success = initializeStudyConfig(configJson);
+          if (success) {
+            setIsStudyInit(true);
+            showToast('Study Configuration Loaded', 'ok');
+          }
+          return success;
+        }}
+        onActivate={async (siteId, code) => {
+          const { verifyActivation, getHardwareFingerprint } = await import('@/lib/security');
+          const deviceId = getHardwareFingerprint();
+          const success = await verifyActivation(siteId, deviceId, code);
+          if (success) {
+            localStorage.setItem('altesa_activated', 'true');
+            localStorage.setItem('altesa_site_id', siteId);
+            setIsActivated(true);
+            showToast(`Site ${siteId} Activated Successfully`, 'ok');
+          }
+          return success;
+        }}
+        hasPin={hasPin}
+        onSetupPin={async (newPin, response, challenge) => {
+          const { validateResponse } = await import('@/lib/security');
+          const success = await validateResponse(challenge, response);
+          if (success) {
+            localStorage.setItem('altesa_crc_pin', newPin);
+            setHasPin(true);
+            showToast('PIN Activated and Saved', 'ok');
+          }
+          return success;
+        }}
+      />
     );
   }
 
@@ -783,106 +771,26 @@ export default function App() {
           />
         )}
         {addPatientOpen && (
-          <div className="modal-overlay" onClick={() => { setAddPatientOpen(false); setModalErr(""); }}>
-            <div className="modal-card" onClick={e => e.stopPropagation()}>
-              <div className="modal-hdr">
-                <div className="modal-title">Add New Patient</div>
-                <button type="button" className="ibtn" onClick={() => { setAddPatientOpen(false); setModalErr(""); }}><X size={18} /></button>
-              </div>
-              <form onSubmit={handleAddPatient}>
-                <div className="modal-body">
-                  {modalErr && (
-                    <div style={{ marginBottom: '16px', padding: '10px 12px', background: 'var(--red-bg)', border: '1px solid var(--red-mid)', borderRadius: 'var(--r1)', color: 'var(--red)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <AlertTriangle size={14} /> {modalErr}
-                    </div>
-                  )}
-                  <div style={{ marginBottom: '24px' }}>
-                    <label className="modal-label"><User size={12} /> Patient Identifier</label>
-                    <input 
-                      autoFocus
-                      type="text" 
-                      className="modal-input"
-                      value={newPatientId} 
-                      onChange={e => setNewPatientId(e.target.value)} 
-                      placeholder="e.g. ALTESA-002"
-                      required
-                      onCopy={(e) => { e.preventDefault(); handleDLPViolation('copy'); }}
-                      onCut={(e) => { e.preventDefault(); handleDLPViolation('cut'); }}
-                      onDragStart={(e) => { e.preventDefault(); handleDLPViolation('drag'); }}
-                    />
-                    <div className="modal-help">
-                      <Info size={14} />
-                      <span>Use the standardized study format (SITE-XXX). This ID will be used for all regulatory tracking.</span>
-                    </div>
-                  </div>
-                  <div style={{ marginBottom: '24px' }}>
-                    <label className="modal-label"><User size={12} /> Full Name</label>
-                    <input 
-                      type="text" 
-                      className="modal-input"
-                      value={newPatientName} 
-                      onChange={e => setNewPatientName(e.target.value)} 
-                      placeholder="e.g. John Doe"
-                      required
-                      onCopy={(e) => { e.preventDefault(); handleDLPViolation('copy'); }}
-                      onCut={(e) => { e.preventDefault(); handleDLPViolation('cut'); }}
-                      onDragStart={(e) => { e.preventDefault(); handleDLPViolation('drag'); }}
-                    />
-                    <div className="modal-help">
-                      <Info size={14} />
-                      <span>Enter the patient&apos;s legal name as it appears on study documents.</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="modal-label"><Globe size={12} /> Primary Language</label>
-                    <select 
-                      className="modal-input"
-                      value={newPatientLang} 
-                      onChange={e => setNewPatientLang(e.target.value)}
-                    >
-                      <option value="English">English</option>
-                      <option value="Spanish">Spanish</option>
-                      <option value="French">French</option>
-                      <option value="German">German</option>
-                    </select>
-                    <div className="modal-help">
-                      <Info size={14} />
-                      <span>Sets the default language for ePRO questionnaires and patient-facing materials.</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="modal-label"><Calendar size={12} /> Consent Date (Screening Day 0)</label>
-                    <input
-                      type="date"
-                      className="modal-input"
-                      value={newPatientScreeningDate}
-                      onChange={e => setNewPatientScreeningDate(e.target.value)}
-                      required
-                      max={fmtISO(TODAY)}
-                    />
-                    <div className="modal-help">
-                      <Info size={14} />
-                      <span>The date the patient signed the Informed Consent Form. Starts the 21-day window.</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-ghost" onClick={() => { setAddPatientOpen(false); setModalErr(""); }}>Cancel</button>
-                  <button type="submit" className="btn btn-primary" disabled={!newPatientId.trim()}>
-                    <UserPlus size={14} style={{ marginRight: '6px', display: 'inline' }} />
-                    Add Patient
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
+          <AddPatientModal
+            isOpen={addPatientOpen}
+            onClose={() => setAddPatientOpen(false)}
+            onAdd={handleAddPatient}
+          />
+        )}
+        {selPatientId && (
+          <ScreeningOutcomeModal
+            patient={patients.find(p => p.id === selPatientId)!}
+            isOpen={screeningOutcomeOpen}
+            onClose={() => setScreeningOutcomeOpen(false)}
+            onOutcome={handleScreeningOutcome}
+          />
         )}
         {editPatientOpen && editPatientData && (
           <div className="modal-overlay" onClick={() => { setEditPatientOpen(false); setModalErr(""); }}>
             <div className="modal-card" onClick={e => e.stopPropagation()}>
               <div className="modal-hdr">
                 <div className="modal-title">Edit Patient Details</div>
-                <button type="button" className="ibtn" onClick={() => { setEditPatientOpen(false); setModalErr(""); }}><X size={18} /></button>
+                <button type="button" aria-label="Close" className="ibtn" onClick={() => { setEditPatientOpen(false); setModalErr(""); }}><X size={18} aria-hidden="true" /></button>
               </div>
               <form onSubmit={handleUpdatePatient}>
                 <div className="modal-body">
@@ -892,8 +800,9 @@ export default function App() {
                     </div>
                   )}
                   <div style={{ marginBottom: '24px' }}>
-                    <label className="modal-label"><User size={12} /> Full Name</label>
+                    <label htmlFor="edit-patient-name" className="modal-label"><User size={12} /> Full Name</label>
                     <input 
+                      id="edit-patient-name"
                       autoFocus
                       type="text" 
                       className="modal-input"
@@ -946,7 +855,7 @@ export default function App() {
             <div className="modal-card" style={{ maxWidth: '480px' }}>
               <div className="modal-hdr">
                 <div className="modal-title">Notification Centre</div>
-                <button className="ibtn" onClick={() => setNotifOpen(false)}><X size={16} /></button>
+                <button aria-label="Close" className="ibtn" onClick={() => setNotifOpen(false)}><X size={16} aria-hidden="true" /></button>
               </div>
               <div className="modal-body" style={{ padding: '0' }}>
                 <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)' }}>
@@ -1033,11 +942,14 @@ export default function App() {
   const p = patients.find(x => x.id === selPatientId);
   if (!p) return null;
 
+  const displayPhaseCode = p.dtqPos && !p.randomizationDate ? 'rv' : p.phaseCode;
+  const displayPhaseLabel = p.dtqPos && !p.randomizationDate ? 'RV Protocol Active' : p.phaseLabel;
+
   const { done, total } = countTasks(p);
   const pct = total ? Math.round((done / total) * 100) : 0;
-  const phBadge = { scr: 'pb-scr', psb: 'pb-psb', rv: 'pb-rv', tx: 'pb-tx', fu: 'pb-fu', et: 'pb-et' }[p.phaseCode] || 'pb-psb';
+  const phBadge = { scr: 'pb-scr', psb: 'pb-psb', rv: 'pb-rv', tx: 'pb-tx', fu: 'pb-fu' }[displayPhaseCode] || 'pb-psb';
   const nowPct = getTodayPct(p);
-  const phaseColor = { scr: 'var(--ph-scr)', psb: 'var(--ph-psb)', rv: 'var(--ph-rv)', tx: 'var(--ph-tx)', fu: 'var(--ph-fu)', et: 'var(--red)' }[p.phaseCode] || 'var(--border)';
+  const phaseColor = { scr: 'var(--ph-scr)', psb: 'var(--ph-psb)', rv: 'var(--ph-rv)', tx: 'var(--ph-tx)', fu: 'var(--ph-fu)' }[displayPhaseCode] || 'var(--border)';
 
   const milestones = [];
   if (p.screeningDate) milestones.push({ l: 'Screening', d: p.screeningDate, cls: 'ms-done' });
@@ -1045,7 +957,7 @@ export default function App() {
   if (p.rvInfectionDate) milestones.push({ l: 'RV Onset', d: p.rvInfectionDate, cls: 'ms-done' });
   if (p.randomizationDate) milestones.push({ l: 'Randomisation', d: p.randomizationDate, cls: 'ms-done' });
   if (p.resolution) milestones.push({ l: 'Resolution', d: p.resolution, cls: 'ms-done' });
-  milestones.push({ l: `Today — ${p.phaseLabel}`, d: TODAY, cls: 'ms-now' });
+  milestones.push({ l: `Today — ${displayPhaseLabel}`, d: TODAY, cls: 'ms-now' });
   if (p.nextVisit) milestones.push({ l: p.nextVisitLabel, d: p.nextVisit, cls: 'ms-next' });
 
   const renderGroup = (label: string, items: any[]) => {
@@ -1321,14 +1233,16 @@ export default function App() {
   };
 
   const dtc = diffDays(TODAY, p.nextVisit);
-  const win = p.phaseCode === 'scr' ? 21 : p.phaseCode === 'psb' ? 5 : p.phaseCode === 'rv' ? 0 : p.phaseCode === 'tx' ? (p.nextVisitLabel.includes('Day 3') || p.nextVisitLabel.includes('Day 7') ? 1 : p.nextVisitLabel.includes('Day 14') || p.nextVisitLabel.includes('Day 28') ? 2 : 3) : 3;
-  const winPct = win === 0 ? (dtc === 0 ? 50 : (dtc < 0 ? 0 : 100)) : Math.min(100, Math.max(0, 50 + (dtc / win) * 50));
-  const wc = Math.abs(dtc) <= win ? 'var(--green)' : dtc < 0 ? 'var(--red)' : 'var(--amber)';
+  const win = p.nextVisitWindow || 0;
+  const winPct = win > 0 ? Math.min(100, Math.max(0, 50 + (dtc / (win * 2)) * 100)) : 50;
+  const wc = win > 0 
+    ? (Math.abs(dtc) <= win ? 'var(--green)' : dtc < 0 ? 'var(--red)' : 'var(--amber)')
+    : (dtc === 0 ? 'var(--green)' : dtc < 0 ? 'var(--red)' : 'var(--amber)');
 
   return (
     <div className="screen">
       <div className="hdr">
-        <div className="hdr-left"><div className="wordmark">ALTE<em>SA</em></div><span className="hdr-context"><DLPWrapper onViolation={handleDLPViolation}>{p.id}</DLPWrapper> · {p.phaseLabel}</span></div>
+        <div className="hdr-left"><div className="wordmark">ALTE<em>SA</em></div><span className="hdr-context"><DLPWrapper onViolation={handleDLPViolation}>{p.id}</DLPWrapper> · {displayPhaseLabel}</span></div>
         <div className="hdr-right">
           <button className="ibtn" onClick={() => setHelpOpen(true)} title="Help Centre"><HelpCircle size={14} /> Help</button>
           <button className="ibtn relative" onClick={() => setNotifOpen(true)} title="Notifications">
@@ -1337,7 +1251,7 @@ export default function App() {
               <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
             )}
           </button>
-          <button className="ibtn" onClick={() => setCmdOpen(true)}><Search size={14} /> ⌘K</button>
+          <button className="ibtn" onClick={() => setCmdOpen(true)}><Search size={14} /></button>
           <button className="ibtn" onClick={() => { setPin(''); setScreen('auth'); }}><Lock size={14} /> Lock</button>
         </div>
       </div>
@@ -1398,7 +1312,7 @@ export default function App() {
               )}
             </div>
             <div className="pv-id-sub">
-              <span className={`phase-badge ${phBadge}`}>{p.phaseLabel}</span>
+              <span className={`phase-badge ${phBadge}`}>{displayPhaseLabel}</span>
               &nbsp;·&nbsp; Study Day <span style={{ fontFamily: 'var(--fm)' }}>{p.studyDay || 0}</span>
               &nbsp;·&nbsp; {p.loc.includes('CLINIC') ? '🏥 Clinic' : '🏠 Home'}
               &nbsp;·&nbsp; <span style={{ fontFamily: 'var(--fm)' }}>{fmtISO(TODAY)}</span>
@@ -1416,21 +1330,7 @@ export default function App() {
               <span style={{ opacity: 0.6, marginLeft: '8px' }}>(Hover or click &quot;Trace Flow&quot; to see links)</span>
             </div>
           </div>
-          <div>
-            <span className={`progress-pill ${pct === 100 ? 'done' : ''}`}>{done}/{total} {pct === 100 ? <Check size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> : ''}</span>
-            {p.phaseCode === 'scr' && pct === 100 && role === 'coordinator' && (
-              <button
-                className="btn btn-success"
-                style={{ marginLeft: '12px', padding: '4px 12px', minHeight: '28px', fontSize: '11px', display: 'inline-flex' }}
-                onClick={() => {
-                  setPsbDayOneDate(fmtISO(TODAY));
-                  setCompleteScreeningOpen(true);
-                }}
-              >
-                Complete Screening
-              </button>
-            )}
-          </div>
+          <div><span className={`progress-pill ${pct === 100 ? 'done' : ''}`}>{done}/{total} {pct === 100 ? <Check size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> : ''}</span></div>
         </div>
         <div className="full-tl-section">
           <div className="full-tl-wrap">
@@ -1439,16 +1339,16 @@ export default function App() {
               <div className="full-s-scr" title="Screening / Rescreening every 6 months">SCR</div>
               <div className="full-s-psb" title="Pre-Symptomatic Baseline — daily DTQ, E-RS/PGIS, WURSS-11. Up to 68 weeks.">Asymptomatic Phase (<abbr title="Pre-Symptomatic Baseline">PSB</abbr>) — up to 68 weeks</div>
               <div className="full-s-rv" title="RV Infection — 48h + 6h randomisation window">RV</div>
-              <div className="full-s-tx" title="Treatment Period — once-daily study drug, D1–D14">Treatment D1–D14</div>
-              <div className="full-s-fu" title="Follow-up — Day 14, 28, 42 (EOS)">Follow-up D14–D42 (EOS)</div>
+              <div className="full-s-tx" title="Treatment Period — once-daily study drug, D1–D7">Treatment D1–D7</div>
+              <div className="full-s-fu" title="Follow-up — Day 14, 28, 42 (EOS)">Follow-up D8–D42 (EOS)</div>
             </div>
             <div className="full-tl-now" style={{ left: `${nowPct.toFixed(1)}%` }}></div>
             <div className="full-tl-labels">
               <div className="ftl-lbl" style={{ flex: '0 0 10%' }}>W0</div>
               <div className="ftl-lbl" style={{ flex: '0 0 60%', color: 'var(--blue)' }}>Weeks 1–68 (rescreening every 6 months · monthly calls ±5d)</div>
               <div className="ftl-lbl" style={{ flex: '0 0 2%' }}></div>
-              <div className="ftl-lbl" style={{ flex: '0 0 12%', color: 'var(--amber)' }}>D1–D14</div>
-              <div className="ftl-lbl" style={{ flex: '0 0 16%', color: 'var(--green)' }}>D14/D28/D42 (EOS)</div>
+              <div className="ftl-lbl" style={{ flex: '0 0 4.6%', color: 'var(--amber)' }}>D1–D7</div>
+              <div className="ftl-lbl" style={{ flex: '0 0 23.4%', color: 'var(--green)' }}>D8/D14/D28/D42 (EOS)</div>
             </div>
             <div className="tl-legend">
               <div className="tl-legend-item"><div className="tl-legend-swatch" style={{ background: 'var(--ph-scr)' }}></div>Screening</div>
@@ -1504,7 +1404,7 @@ export default function App() {
               <div className="card" ref={taskListRef} style={{ position: 'relative' }}>
                 <DependencyLines activeTrace={tracedTask || hoveredTask} p={p} taskListRef={taskListRef} />
                 <div className="card-hdr">
-                  <div><div className="card-title">Today&apos;s Assessment Checklist</div><div className="card-sub">{p.phaseLabel} · {p.loc} · {fmtISO(TODAY)}</div></div>
+                  <div><div className="card-title">Today&apos;s Assessment Checklist</div><div className="card-sub">{displayPhaseLabel} · {p.loc} · {fmtISO(TODAY)}</div></div>
                   <div className={`progress-pill ${pct === 100 ? 'done' : ''}`}>{done}/{total}</div>
                 </div>
                 {renderGroup('Questionnaires / ePRO', p.tasks.q)}
@@ -1548,6 +1448,20 @@ export default function App() {
                 </div>
               </div>
             )}
+            {p.phaseCode === 'scr' && (
+              <div className="scard">
+                <div className="scard-hdr"><CheckCircle2 size={14} /> Screening Actions</div>
+                <div className="scard-body" style={{ padding: '10px 14px' }}>
+                  <button 
+                    className="btn btn-primary" 
+                    style={{ width: '100%', justifyContent: 'center' }}
+                    onClick={() => setScreeningOutcomeOpen(true)}
+                  >
+                    Record Screening Outcome
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="scard">
               <div className="scard-hdr"><Bell size={14} /> Schedule & Alerts</div>
               <div className="scard-body" style={{ padding: '10px 14px' }}>
@@ -1558,14 +1472,27 @@ export default function App() {
               </div>
             </div>
             <div className="scard">
-              <div className="scard-hdr"><Calendar size={14} /> Next Visit Window</div>
+              <div className="scard-hdr"><Calendar size={14} /> {win > 0 ? 'Next Visit Window' : 'Next Visit'}</div>
               <div className="scard-body">
                 <div style={{ fontSize: '11.5px', color: 'var(--t2)', marginBottom: '7px' }}>{p.nextVisitLabel}</div>
                 <div className="wt-center" style={{ color: wc }}>{fmtHuman(p.nextVisit)}</div>
-                <div className="wt-wrap">
-                  <div className="wt-bar"><div className="wt-ok-zone" style={{ left: '25%', right: '25%', background: wc }}></div><div className="wt-cursor" style={{ left: `${winPct}%`, background: wc }}></div></div>
-                  <div className="wt-labels"><span>−3 days</span><span style={{ color: wc, fontWeight: 600 }}>Optimal</span><span>+3 days</span></div>
-                </div>
+                {win > 0 ? (
+                  <div className="wt-wrap">
+                    <div className="wt-bar">
+                      <div className="wt-ok-zone" style={{ left: '25%', right: '25%', background: wc }}></div>
+                      <div className="wt-cursor" style={{ left: `${winPct}%`, background: wc }}></div>
+                    </div>
+                    <div className="wt-labels">
+                      <span>−{win} {win === 1 ? 'day' : 'days'}</span>
+                      <span style={{ color: wc, fontWeight: 600 }}>Optimal</span>
+                      <span>+{win} {win === 1 ? 'day' : 'days'}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--t3)', marginTop: '8px', padding: '8px', background: 'rgba(0,0,0,0.02)', borderRadius: '4px' }}>
+                    No visit window defined for this milestone.
+                  </div>
+                )}
               </div>
             </div>
             {p.labNote && <div className="scard"><div className="scard-hdr" style={{ color: 'var(--blue)' }}><Flag size={14} /> Protocol Note</div><div className="scard-body"><div className="scard-note"><DLPWrapper onViolation={handleDLPViolation}>{p.labNote}</DLPWrapper></div></div></div>}
@@ -1574,9 +1501,82 @@ export default function App() {
       </div>
       
       {/* Modals */}
+      {selPatientId && (
+        <ScreeningOutcomeModal
+          patient={patients.find(p => p.id === selPatientId)!}
+          isOpen={screeningOutcomeOpen}
+          onClose={() => setScreeningOutcomeOpen(false)}
+          onOutcome={handleScreeningOutcome}
+        />
+      )}
+      {editPatientOpen && editPatientData && (
+        <div className="modal-overlay" onClick={() => { setEditPatientOpen(false); setModalErr(""); }}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-hdr">
+              <div className="modal-title">Edit Patient Details</div>
+              <button type="button" aria-label="Close" className="ibtn" onClick={() => { setEditPatientOpen(false); setModalErr(""); }}><X size={18} aria-hidden="true" /></button>
+            </div>
+            <form onSubmit={handleUpdatePatient}>
+              <div className="modal-body">
+                {modalErr && (
+                  <div style={{ marginBottom: '16px', padding: '10px 12px', background: 'var(--red-bg)', border: '1px solid var(--red-mid)', borderRadius: 'var(--r1)', color: 'var(--red)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <AlertTriangle size={14} /> {modalErr}
+                  </div>
+                )}
+                <div style={{ marginBottom: '24px' }}>
+                  <label htmlFor="edit-patient-name-pv" className="modal-label"><User size={12} /> Full Name</label>
+                  <input 
+                    id="edit-patient-name-pv"
+                    autoFocus
+                    type="text" 
+                    className="modal-input"
+                    value={editPatientData.name} 
+                    onChange={e => setEditPatientData({ ...editPatientData, name: e.target.value })} 
+                    placeholder="e.g. John Doe"
+                    required
+                    onCopy={(e) => { e.preventDefault(); handleDLPViolation('copy'); }}
+                    onCut={(e) => { e.preventDefault(); handleDLPViolation('cut'); }}
+                    onDragStart={(e) => { e.preventDefault(); handleDLPViolation('drag'); }}
+                  />
+                </div>
+                <div style={{ marginBottom: '24px' }}>
+                  <label className="modal-label"><Globe size={12} /> Primary Language</label>
+                  <select 
+                    className="modal-input"
+                    value={editPatientData.lang} 
+                    onChange={e => setEditPatientData({ ...editPatientData, lang: e.target.value })}
+                  >
+                    <option value="English">English</option>
+                    <option value="Spanish">Spanish</option>
+                    <option value="French">French</option>
+                    <option value="German">German</option>
+                    <option value="Mandarin">Mandarin</option>
+                  </select>
+                </div>
+                <div style={{ marginBottom: '24px' }}>
+                  <label className="modal-label"><Hospital size={12} /> Current Location</label>
+                  <select 
+                    className="modal-input"
+                    value={editPatientData.loc} 
+                    onChange={e => setEditPatientData({ ...editPatientData, loc: e.target.value })}
+                  >
+                    <option value="CLINIC">CLINIC</option>
+                    <option value="HOME">HOME</option>
+                    <option value="HOME→CLINIC">HOME→CLINIC</option>
+                  </select>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="ibtn" onClick={() => { setEditPatientOpen(false); setModalErr(""); }}>Cancel</button>
+                <button type="submit" className="ibtn" style={{ background: 'var(--blue)', color: '#fff', border: 'none', fontWeight: 600 }}>Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {wzOpen && (
         <Wizard 
-          patientId={p.id}
+          patientId={selPatientId}
           step={wzStep} 
           setStep={setWzStep} 
           chks={wzChks} 
@@ -1590,24 +1590,8 @@ export default function App() {
               setWzOpen(false);
             }
           }}
-          onEarlyTermination={() => {
-            setWzOpen(false);
-            setPatients(prev => prev.map(pt => {
-              if (pt.id !== p.id) return pt;
-              return {
-                ...pt,
-                dtqPos: false,
-                alert: null,
-                phase: 'EARLY TERMINATION',
-                phaseCode: 'et',
-                phaseLabel: 'Early Termination (Screen Failure)',
-                tasks: { q: [], pr: [], l: [], ad: [] },
-                labNote: `Patient withdrawn. Randomization criteria not met or window expired on ${fmtISO(TODAY)}.`
-              };
-            }));
-            showToast(`${p.id} marked as Early Termination`, 'ok');
-          }}
           onRandomise={() => setRndConfirmOpen(true)}
+          onAbort={handleAbortProtocol}
           onToggleChk={(step: number, i: number) => {
             const currentChks = wzChks[step] || new Set();
             if (!currentChks.has(i)) {
@@ -1639,48 +1623,6 @@ export default function App() {
         </div>
       )}
 
-      {completeScreeningOpen && (
-        <div className="confirm-overlay" style={{ zIndex: 700 }} onClick={() => setCompleteScreeningOpen(false)}>
-          <div className="modal-card" onClick={e => e.stopPropagation()}>
-            <div className="modal-hdr">
-              <div className="modal-title">Confirm Complete Screening</div>
-              <button type="button" className="ibtn" onClick={() => setCompleteScreeningOpen(false)}><X size={18} /></button>
-            </div>
-            <div className="modal-body">
-              <div style={{ marginBottom: '16px' }}>
-                All Screening requirements have been met. Transitioning to the <strong>Asymptomatic Phase (PSB)</strong>.
-              </div>
-              <div>
-                <label className="modal-label"><Calendar size={12} /> Actual PSB Day 1 Date</label>
-                <input
-                  type="date"
-                  className="modal-input"
-                  value={psbDayOneDate}
-                  onChange={e => setPsbDayOneDate(e.target.value)}
-                  required
-                />
-                <div className="modal-help">
-                  <Info size={14} />
-                  <span>The true date the participant entered the Asymptomatic Phase (Day 1). This will re-calibrate all future visits and study days.</span>
-                </div>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-ghost" onClick={() => setCompleteScreeningOpen(false)}>Cancel</button>
-              <button
-                type="button"
-                className="btn btn-success"
-                disabled={!psbDayOneDate}
-                onClick={handleCompleteScreening}
-              >
-                <Check size={14} style={{ marginRight: '6px', display: 'inline' }} />
-                Confirm & Start PSB
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {rescreeningOpen && rescreeningData && (
         <RescreeningWizard 
           patient={rescreeningData}
@@ -1698,49 +1640,56 @@ export default function App() {
           <div className="confirm-card">
             <div className="confirm-icon"><Microscope size={32} color="var(--blue)" /></div>
             <div className="confirm-title">Confirm Randomisation</div>
-            <div className="confirm-body">You are about to <strong>randomise {p.id}</strong> and initiate the Treatment Period. This action is <strong>irreversible</strong> in the clinical record. All 7 protocol steps have been confirmed.</div>
+            <div className="confirm-body">You are about to <strong>randomise {selPatientId}</strong> and initiate the Treatment Period. This action is <strong>irreversible</strong> in the clinical record. All 7 protocol steps have been confirmed.</div>
             <div className="confirm-btns">
               <button className="btn btn-ghost" onClick={() => setRndConfirmOpen(false)}>Review again</button>
               <button className="btn btn-success" onClick={() => {
                 setRndConfirmOpen(false);
                 setWzOpen(false);
-
-                setPatients(prev => prev.map(pt => {
-                  if (pt.id !== p.id) return pt;
-                  return {
-                    ...pt,
-                    dtqPos: false,
-                    alert: null,
-                    phase: 'TREATMENT',
-                    phaseCode: 'tx',
-                    phaseLabel: 'Treatment Period · Day 1',
-                    loc: 'CLINIC',
-                    randomizationDate: TODAY,
-                    tasks: {
-                      q: [
-                        { code: 'ERS', label: 'E-RS / PGIS (EXACT)', icon: '📋', done: false, note: 'Daily D1→D28' },
-                        { code: 'WURSS', label: 'WURSS-11', icon: '📋', done: false, note: 'Daily through Day 28' },
-                        { code: 'PRN', label: 'COPD PRN Inhaler Use', icon: '💨', done: false, note: 'Collected with E-RS' },
-                      ],
-                      pr: [
-                        { code: 'PE', label: 'Physical Exam — limited (include weight)', icon: '🩺', done: false },
-                        { code: 'VS', label: 'Vital Signs', icon: '🩺', done: false },
-                        { code: 'OSC', label: 'Oscillometry', icon: '🫁', done: false, seq: true },
-                        { code: 'SPI', label: 'Spirometry', icon: '🫁', done: false, dependsOn: ['OSC'] },
-                        { code: 'ECG', label: '12-lead ECG', icon: '🫀', done: false, note: 'Required Day 1 only (Table 1, fn. a)' },
-                        { code: 'CVC', label: 'Central Virology Collection', icon: '🦠', done: false },
-                        { code: 'CSL', label: 'Central Safety Labs', icon: '🧪', done: false },
-                        { code: 'PT_U', label: 'Pregnancy Test (Urine)', icon: '🧪', done: false, note: 'WOCBP only' },
-                        { code: 'PK', label: 'Sparse PK Sampling — PRIOR to Day 1 dosing', icon: '🩸', done: false },
-                        { code: 'DRUG', label: 'Study Drug Dosing — Day 1', icon: '💊', done: false, note: 'Initial dose supervised in clinic', dependsOn: ['CVC', 'PK', 'SPI', 'ECG', 'PT_U'] }
-                      ],
-                      l: [],
-                      ad: []
-                    }
-                  };
+                setPatients(prev => prev.map(p => {
+                  if (p.id === selPatientId) {
+                    return {
+                      ...p,
+                      dtqPos: false,
+                      alert: null,
+                      phase: 'TREATMENT',
+                      phaseCode: 'tx',
+                      phaseLabel: 'Treatment · Day 1',
+                      loc: 'CLINIC',
+                      randomizationDate: new Date(),
+                      nextVisit: addDays(new Date(), 2),
+                      nextVisitLabel: 'Treatment Day 3 (±1) — Clinic',
+                      nextVisitWindow: 1,
+                      tasks: {
+                        q: [
+                          { code: 'ERS', label: 'E-RS / PGIS (EXACT)', icon: '📋', done: false, note: 'Daily D1→D28. Continues to D42 if not returned to PSB by D28 (fn. i)' },
+                          { code: 'WURSS', label: 'WURSS-11', icon: '📋', done: false, note: 'Daily through Day 28 ONLY — does not continue to D42 (fn. i)' },
+                        ],
+                        pr: [
+                          { code: 'PE', label: 'Physical Exam — limited (include weight)', icon: '🩺', done: false, note: 'Symptom-directed. Include weight (fn. c)' },
+                          { code: 'VS', label: 'Vital Signs', icon: '🩺', done: false, note: 'Seated ≥ 5 min (fn. d)' },
+                          { code: 'OSC', label: 'Oscillometry', icon: '🫁', done: false, seq: true, note: 'Perform BEFORE spirometry (fn. f)' },
+                          { code: 'SPI', label: 'Spirometry', icon: '🫁', done: false, note: 'Washout required (fn. f)', dependsOn: ['OSC'], attestation: 'I confirm that the patient has completed the required washout period prior to this assessment.' },
+                          { code: 'CVC', label: 'Central Virology Collection', icon: '🦠', done: false, note: 'Mid-turbinate nasal swab each nostril (fn. g)' },
+                          { code: 'ECG', label: 'ECG (12-lead)', icon: '🫀', done: false, note: 'Collect PRIOR to blood draw (fn. e)' },
+                          { code: 'DRUG', label: 'Study Drug Dosing — Day 1', icon: '💊', done: false, note: 'First dose in clinic', dependsOn: ['CVC', 'ECG', 'CSL'], requiresData: { label: 'Time of First Dose', type: 'time' } },
+                        ],
+                        l: [
+                          { code: 'CSL', label: 'Central Safety Labs — Chemistry / Haematology', icon: '🧪', done: false, note: 'Urinalysis only if clinically indicated' },
+                          { code: 'PT_U', label: 'Pregnancy Test (urine — WOCBP only)', icon: '🧪', done: false, note: 'Urine at Day 1 Pre-Dose (fn. a)' },
+                        ],
+                        ad: [
+                          { code: 'AE', label: 'Adverse Events', icon: '⚠️', done: false, regulatory: true, note: 'Collected from first dose through Day 42 Visit (fn. k)', subcat: 'fup' },
+                          { code: 'CMED', label: 'Concomitant Medications', icon: '💊', done: false, note: 'Record any changes (fn. l)', subcat: 'fup' },
+                          { code: 'HOSP', label: 'COPD-related Hospitalisations', icon: '🏥', done: false, subcat: 'fup' },
+                          { code: 'PRN', label: 'COPD PRN Inhaler Use', icon: '💨', done: false, note: 'Collected with E-RS', subcat: 'general' },
+                        ]
+                      }
+                    };
+                  }
+                  return p;
                 }));
-
-                showToast(`${p.id} randomised — Treatment Period Day 1 tasks injected`, 'ok');
+                showToast(`${selPatientId} randomised — Treatment Period activated`, 'ok');
               }}><Check size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Confirm Randomisation</button>
             </div>
           </div>
@@ -1776,44 +1725,6 @@ export default function App() {
         </div>
       )}
 
-      {overrideTask && (
-        <div className="confirm-overlay" style={{ zIndex: 700 }}>
-          <div className="confirm-card">
-            <div className="confirm-icon"><AlertTriangle size={32} color="var(--amber)" /></div>
-            <div className="confirm-title">Dependency Override Required</div>
-            <div className="confirm-body">
-              <p>You are attempting to complete <strong>{overrideTask.task.label}</strong> before its prerequisites ({overrideTask.task.dependsOn?.join(', ')}) are met.</p>
-              <p style={{ marginTop: '8px', fontSize: '13px' }}>Under QbD guidelines, you must provide a clinical justification to override this logical sequence.</p>
-              <textarea
-                autoFocus
-                placeholder="Enter justification for overriding task sequence..."
-                value={overrideReason}
-                onChange={e => setOverrideReason(e.target.value)}
-                style={{ width: '100%', marginTop: '12px', padding: '8px', borderRadius: '4px', border: '1px solid #ccc', minHeight: '60px', fontSize: '13px' }}
-              />
-            </div>
-            <div className="confirm-btns">
-              <button className="btn btn-ghost" onClick={() => { setOverrideTask(null); setOverrideReason(''); }}>Cancel</button>
-              <button
-                className="btn btn-primary"
-                disabled={overrideReason.trim().length < 10}
-                onClick={() => {
-                  const p = patients.find(x => x.id === overrideTask.pid);
-                  if (p) {
-                    showToast(`Override logged: ${overrideReason.substring(0,20)}...`, 'info');
-                  }
-                  // Proceed to regular confirm
-                  setTaskConfirm(overrideTask);
-                  setOverrideTask(null);
-                  setOverrideReason('');
-                }}>
-                Acknowledge & Proceed
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {taskConfirm && (
         <div className="confirm-overlay" style={{ zIndex: 700 }}>
           <div className="confirm-card">
@@ -1824,28 +1735,42 @@ export default function App() {
             <div className="confirm-body">
               {taskConfirm.task.code === 'DTQ' ? (
                 <>What was the result of the <strong>Daily Trigger Questionnaire</strong> for <strong>{taskConfirm.pid}</strong>?</>
-              ) : taskConfirm.task.code === 'SPI' ? (
+              ) : (
                 <>
                   <p>Are you sure you want to mark <strong>{taskConfirm.task.label}</strong> as complete for <strong>{taskConfirm.pid}</strong>?</p>
-                  <div style={{marginTop:'12px', padding:'8px', background:'#EFF6FF', borderRadius:'4px', fontSize:'11px', color:'#1E3A8A', border:'1px solid #BFDBFE'}}>
-                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={spiAttested}
-                        onChange={(e) => setSpiAttested(e.target.checked)}
-                        style={{ marginTop: '2px' }}
+                  
+                  {taskConfirm.task.attestation && (
+                    <div style={{ marginTop: '16px', padding: '12px', background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)', textAlign: 'left' }}>
+                      <label style={{ display: 'flex', gap: '10px', cursor: 'pointer', fontSize: '13px' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={attestationChecked} 
+                          onChange={(e) => setAttestationChecked(e.target.checked)}
+                          style={{ marginTop: '3px' }}
+                        />
+                        <span>{taskConfirm.task.attestation}</span>
+                      </label>
+                    </div>
+                  )}
+
+                  {taskConfirm.task.requiresData && (
+                    <div style={{ marginTop: '16px', textAlign: 'left' }}>
+                      <label className="modal-label">{taskConfirm.task.requiresData.label}</label>
+                      <input 
+                        type={taskConfirm.task.requiresData.type} 
+                        className="modal-input"
+                        placeholder={taskConfirm.task.requiresData.placeholder}
+                        value={taskDataValue}
+                        onChange={(e) => setTaskDataValue(e.target.value)}
                       />
-                      <span><strong>ATTESTATION (QbD):</strong> I confirm that the patient has completed the required washout period for Bronchodilators prior to this spirometry (SABD 4-6h, LABD 12-24h).</span>
-                    </label>
-                  </div>
+                    </div>
+                  )}
                 </>
-              ) : (
-                <>Are you sure you want to mark <strong>{taskConfirm.task.label}</strong> as complete for <strong>{taskConfirm.pid}</strong>?</>
               )}
               {(taskConfirm.task.regulatory || taskConfirm.task.critical) && <div style={{marginTop:'12px', padding:'8px', background:'var(--red-bg)', borderRadius:'4px', fontSize:'11px', color:'var(--red)', fontWeight:600, border:'1px solid var(--red)'}}>⚠ REGULATORY REQUIREMENT: This assessment is critical for study compliance and data integrity.</div>}
             </div>
             <div className="confirm-btns">
-              <button className="btn btn-ghost" onClick={() => { setTaskConfirm(null); setSpiAttested(false); }}>Cancel</button>
+              <button className="btn btn-ghost" onClick={() => setTaskConfirm(null)}>Cancel</button>
               {taskConfirm.task.code === 'DTQ' ? (
                 <>
                   <button className="btn btn-danger" onClick={() => {
@@ -1858,17 +1783,13 @@ export default function App() {
                   }}>Negative Result</button>
                 </>
               ) : (
-                <button className={`btn ${taskConfirm.task.critical || taskConfirm.task.regulatory ? 'btn-danger' : 'btn-primary'}`} onClick={() => {
-                  if (taskConfirm.task.code === 'SPI') {
-                    if (!spiAttested) {
-                      showToast('You must confirm the washout attestation to proceed.', 'err');
-                      return;
-                    }
-                  }
-                  performToggle(taskConfirm.pid, taskConfirm.task.code);
-                  setTaskConfirm(null);
-                  setSpiAttested(false);
-                }}>Confirm Completion</button>
+                <button 
+                  className={`btn ${taskConfirm.task.critical || taskConfirm.task.regulatory ? 'btn-danger' : 'btn-primary'}`} 
+                  disabled={(taskConfirm.task.attestation && !attestationChecked) || (taskConfirm.task.requiresData && !taskDataValue)}
+                  onClick={() => {
+                    performToggle(taskConfirm.pid, taskConfirm.task.code);
+                    setTaskConfirm(null);
+                  }}>Confirm Completion</button>
               )}
             </div>
           </div>
@@ -1898,11 +1819,12 @@ export default function App() {
           <div className="modal-card">
             <div className="modal-hdr">
               <div className="modal-title">Edit Task Details</div>
-              <button className="ibtn" onClick={() => setEditTask(null)}><X size={16} /></button>
+              <button aria-label="Close" className="ibtn" onClick={() => setEditTask(null)}><X size={16} aria-hidden="true" /></button>
             </div>
             <div className="modal-body">
-              <div className="modal-label"><FileText size={12} /> Task Label</div>
+              <div className="modal-label"><label htmlFor="edit-task-label"><FileText size={12} /> Task Label</label></div>
               <input 
+                id="edit-task-label"
                 className="modal-input" 
                 value={editTask.task.label} 
                 onChange={e => setEditTask({ ...editTask, task: { ...editTask.task, label: e.target.value } })}
@@ -1924,7 +1846,9 @@ export default function App() {
                   <AlertTriangle size={14} /> {dateError}
                 </div>
               )}
+              <div className="modal-label" style={{ marginTop: '16px' }}><label htmlFor="edit-task-date"><Calendar size={12} /> Due Date</label></div>
               <input 
+                id="edit-task-date"
                 type="date"
                 className="modal-input" 
                 value={editTask.task.dueDate ? fmtISO(new Date(editTask.task.dueDate)) : ''} 
@@ -1956,7 +1880,7 @@ export default function App() {
           <div className="modal-card" onClick={e => e.stopPropagation()}>
             <div className="modal-hdr">
               <div className="modal-title">Edit Patient Details</div>
-              <button type="button" className="ibtn" onClick={() => { setEditPatientOpen(false); setModalErr(""); }}><X size={18} /></button>
+              <button type="button" aria-label="Close" className="ibtn" onClick={() => { setEditPatientOpen(false); setModalErr(""); }}><X size={18} aria-hidden="true" /></button>
             </div>
             <form onSubmit={handleUpdatePatient}>
               <div className="modal-body">
@@ -1966,8 +1890,9 @@ export default function App() {
                   </div>
                 )}
                 <div style={{ marginBottom: '24px' }}>
-                  <label className="modal-label"><User size={12} /> Full Name</label>
+                  <label htmlFor="edit-patient-name-2" className="modal-label"><User size={12} /> Full Name</label>
                   <input 
+                    id="edit-patient-name-2"
                     autoFocus
                     type="text" 
                     className="modal-input"
@@ -2021,7 +1946,7 @@ export default function App() {
           <div className="modal-card" style={{ maxWidth: '480px' }}>
             <div className="modal-hdr">
               <div className="modal-title">Notification Centre</div>
-              <button className="ibtn" onClick={() => setNotifOpen(false)}><X size={16} /></button>
+              <button aria-label="Close" className="ibtn" onClick={() => setNotifOpen(false)}><X size={16} aria-hidden="true" /></button>
             </div>
             <div className="modal-body" style={{ padding: '0' }}>
               <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg)' }}>
@@ -2103,7 +2028,7 @@ export default function App() {
           <div className="modal-card" style={{ maxWidth: '400px' }}>
             <div className="modal-hdr">
               <div className="modal-title">Open Query</div>
-              <button className="ibtn" onClick={() => setQueryModalOpen(false)}><X size={16} /></button>
+              <button aria-label="Close" className="ibtn" onClick={() => setQueryModalOpen(false)}><X size={16} aria-hidden="true" /></button>
             </div>
             <form onSubmit={submitQuery}>
               <div className="modal-body">

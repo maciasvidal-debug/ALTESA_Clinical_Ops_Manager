@@ -4,9 +4,20 @@ import React, { useState, useEffect } from 'react';
 import { X, ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { WZ_STEPS } from '@/lib/data';
 
-export function Wizard({ step, setStep, chks, setChks, cdStart, onClose, onRandomise, onToggleChk, patientId, onEarlyTermination }: any) {
+const renderSafeHTML = (text: string) => {
+  const parts = text.split(/(<strong>.*?<\/strong>)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('<strong>') && part.endsWith('</strong>')) {
+      return <strong key={i}>{part.slice(8, -9)}</strong>;
+    }
+    return <React.Fragment key={i}>{part}</React.Fragment>;
+  });
+};
+
+export function Wizard({ patientId, step, setStep, chks, setChks, cdStart, onClose, onRandomise, onToggleChk, onAbort }: any) {
   const [cdStr, setCdStr] = useState('');
   const [urgent, setUrgent] = useState(false);
+  const [showAbortConfirm, setShowAbortConfirm] = useState(false);
 
   useEffect(() => {
     const tick = () => {
@@ -43,12 +54,37 @@ export function Wizard({ step, setStep, chks, setChks, cdStart, onClose, onRando
     }
   };
 
+  if (showAbortConfirm) {
+    return (
+      <div className="wz-overlay" onClick={() => setShowAbortConfirm(false)}>
+        <div className="wz-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+          <div className="wz-top">
+            <div className="wz-heading">Abort RV Protocol</div>
+            <button aria-label="Close" className="wz-close-btn" onClick={() => setShowAbortConfirm(false)}><X size={14} aria-hidden="true" /></button>
+          </div>
+          <div className="wz-body" style={{ padding: '24px' }}>
+            <p style={{ fontSize: '14px', color: 'var(--t2)', marginBottom: '16px' }}>
+              Are you sure you want to abort the RV Protocol for <strong>{patientId}</strong>?
+            </p>
+            <p style={{ fontSize: '13px', color: 'var(--t3)' }}>
+              This will mark the randomization as failed (e.g., window expired or criteria not met) and return the patient to the Asymptomatic Phase.
+            </p>
+          </div>
+          <div className="wz-foot" style={{ justifyContent: 'flex-end', gap: '12px' }}>
+            <button className="btn btn-ghost" onClick={() => setShowAbortConfirm(false)}>Cancel</button>
+            <button className="btn" style={{ background: 'var(--red)', color: 'white' }} onClick={onAbort}>Confirm Abort</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="wz-overlay" onClick={() => onClose(false)}>
       <div className="wz-card" onClick={e => e.stopPropagation()}>
         <div className="wz-top">
           <div>
-            <div className="wz-heading">RV Protocol — {patientId || 'ALTESA-047'}</div>
+            <div className="wz-heading">RV Protocol — {patientId}</div>
             <div className="wz-heading-sub">Step {step + 1} of {WZ_STEPS.length} · {currentStep.title}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
@@ -56,7 +92,7 @@ export function Wizard({ step, setStep, chks, setChks, cdStart, onClose, onRando
               <div className={`cd ${urgent ? 'urgent' : ''}`}>{cdStr}</div>
               <div className="cd-lbl">Window remaining</div>
             </div>
-            <button className="wz-close-btn" onClick={() => onClose(false)} title="Close (progress saved)"><X size={14} /></button>
+            <button aria-label="Close (progress saved)" className="wz-close-btn" onClick={() => onClose(false)} title="Close (progress saved)"><X size={14} aria-hidden="true" /></button>
           </div>
         </div>
         <div className="wz-stepper">
@@ -67,34 +103,32 @@ export function Wizard({ step, setStep, chks, setChks, cdStart, onClose, onRando
         <div className="wz-body">
           <div className="wz-step-n">Step {step + 1} of {WZ_STEPS.length}</div>
           <div className="wz-step-title">{currentStep.title}</div>
-          <div className="wz-step-desc" dangerouslySetInnerHTML={{ __html: currentStep.body }}></div>
+          <div className="wz-step-desc">{renderSafeHTML(currentStep.body)}</div>
           {currentStep.checks.map((c: string, i: number) => (
             <div key={i} className={`wz-chk-item ${currentChks.has(i) ? 'checked' : ''}`}
               tabIndex={0} role="checkbox" aria-checked={currentChks.has(i)}
               onClick={() => toggleChk(i)}
               onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleChk(i); } }}>
               <div className={`chkbox ${currentChks.has(i) ? 'checked' : ''}`} style={{ flexShrink: 0 }}></div>
-              <span dangerouslySetInnerHTML={{ __html: c }}></span>
+              <span>{renderSafeHTML(c)}</span>
             </div>
           ))}
         </div>
-        <div className="wz-foot" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+        <div className="wz-foot">
           <div style={{ display: 'flex', gap: '8px' }}>
             <button className="btn btn-ghost" onClick={() => step === 0 ? onClose(false) : setStep(step - 1)}>
               {step === 0 ? <><X size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Close</> : <><ArrowLeft size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Back</>}
             </button>
-            <button className="btn btn-danger" onClick={() => { if(window.confirm('Are you sure you want to mark this patient as Early Termination? This action is irreversible.')) onEarlyTermination(); }}>
-              Fail / Early Terminate
+            <button className="btn btn-ghost" style={{ color: 'var(--red)' }} onClick={() => setShowAbortConfirm(true)}>
+              Abort Protocol
             </button>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div className={`wz-missing-badge ${allDone ? 'none' : ''}`}>
-              {missCount > 0 ? `${missCount} item${missCount > 1 ? 's' : ''} to confirm` : ''}
-            </div>
-            <button className={`btn ${isLast ? 'btn-success' : 'btn-primary'}`} disabled={!allDone} onClick={() => isLast ? onRandomise() : setStep(step + 1)}>
-              {isLast ? <><Check size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Randomise</> : <>Next <ArrowRight size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/></>}
-            </button>
+          <div className={`wz-missing-badge ${allDone ? 'none' : ''}`}>
+            {missCount > 0 ? `${missCount} item${missCount > 1 ? 's' : ''} to confirm` : ''}
           </div>
+          <button className={`btn ${isLast ? 'btn-success' : 'btn-primary'}`} disabled={!allDone} onClick={() => isLast ? onRandomise() : setStep(step + 1)}>
+            {isLast ? <><Check size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/> Randomise</> : <>Next <ArrowRight size={14} style={{display:'inline', verticalAlign:'text-bottom'}}/></>}
+          </button>
         </div>
       </div>
     </div>

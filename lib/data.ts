@@ -15,48 +15,32 @@ export function fmtHuman(d: Date) {
   return `${months[d.getMonth()]} ${d.getDate()}${d.getFullYear() !== TODAY.getFullYear() ? ', ' + d.getFullYear() : ''}`;
 }
 
-// Six Sigma: Refactored engine, Milestone-driven rather than absolute static percentages.
 export function getTodayPct(p: any) {
   const SCR_PCT = 10.0;
   const PSB_PCT = 60.0;
   const RV_PCT = 2.0;
-  const TX_PCT = 12.0;
-  const FUP_PCT = 16.0;
-
-  // Real projected limits for milestone tracking to prevent visual desync
-  const SCR_DAYS = 21;
-  const PSB_DAYS = 476;
-  const TX_DAYS = 14;
-  const FUP_DAYS = 28;
+  const TX_PCT = 4.6;
+  const FUP_PCT = 23.4;
 
   if (p.phaseCode === 'scr') {
     const days = Math.max(0, diffDays(p.screeningDate, TODAY));
-    return Math.min(SCR_PCT, (days / SCR_DAYS) * SCR_PCT);
+    return Math.min(SCR_PCT, (days / 42) * SCR_PCT);
   } 
-  else if (p.phaseCode === 'psb') {
-    // In PSB, even if days > 476, we cap it logically. If days are fewer, it stays proportionally inside PSB.
-    const days = Math.max(0, diffDays(p.psbStartDate || p.screeningDate, TODAY));
-    return SCR_PCT + Math.min(PSB_PCT, (days / PSB_DAYS) * PSB_PCT);
-  }
-  else if (p.phaseCode === 'rv') {
-    // If we are in RV window, we push exactly to the edge of the RV segment
-    return SCR_PCT + PSB_PCT + RV_PCT;
-  }
   else if (p.phaseCode === 'tx') {
-    // If we reach TX, we force the marker past the previous phases, ensuring visual consistency regardless of previous durations
     const days = Math.max(0, diffDays(p.randomizationDate || p.rvInfectionDate || TODAY, TODAY));
-    return SCR_PCT + PSB_PCT + RV_PCT + Math.min(TX_PCT, (days / TX_DAYS) * TX_PCT);
-  }
-  else if (p.phaseCode === 'et') {
-    // Early termination stops progress visual marker where it died
-    const days = Math.max(0, diffDays(p.rvInfectionDate || p.psbStartDate || TODAY, TODAY));
-    return SCR_PCT + PSB_PCT + Math.min(RV_PCT, (days / 2) * RV_PCT);
+    return SCR_PCT + PSB_PCT + RV_PCT + Math.min(TX_PCT, (days / 7) * TX_PCT);
   }
   else if (p.phaseCode === 'fu') {
-    // Follow-up anchors from randomization date explicitly, +14 days to start
-    const startOfFuDate = addDays(p.randomizationDate || p.rvInfectionDate || TODAY, TX_DAYS);
-    const days = Math.max(0, diffDays(startOfFuDate, TODAY));
-    return SCR_PCT + PSB_PCT + RV_PCT + TX_PCT + Math.min(FUP_PCT, (days / FUP_DAYS) * FUP_PCT);
+    const days = Math.max(0, diffDays(p.randomizationDate || p.rvInfectionDate || TODAY, TODAY) - 7);
+    return SCR_PCT + PSB_PCT + RV_PCT + TX_PCT + Math.min(FUP_PCT, (days / 35) * FUP_PCT);
+  }
+  else if (p.dtqPos && !p.randomizationDate) {
+    // RV phase
+    return SCR_PCT + PSB_PCT + (RV_PCT / 2);
+  }
+  else if (p.phaseCode === 'psb') {
+    const days = Math.max(0, diffDays(p.psbStartDate || p.screeningDate, TODAY));
+    return SCR_PCT + Math.min(PSB_PCT, (days / 476) * PSB_PCT);
   }
   
   return 100;
@@ -88,6 +72,14 @@ export type Task = {
   dueDate?: Date;
   subcat?: 'screening' | 'fup' | 'general';
   dependsOn?: string[];
+  attestation?: string;
+  requiresData?: {
+    label: string;
+    type: 'time' | 'number' | 'text';
+    placeholder?: string;
+  };
+  dataValue?: string;
+  attested?: boolean;
 };
 
 export type Document = {
@@ -113,10 +105,14 @@ export type Patient = {
   lang: string;
   alert: string | null;
   dtqPos?: boolean;
+  nextVisitWindow?: number;
   screeningDate: Date;
+  screeningOutcome?: 'success' | 'failure';
+  screeningFailureReason?: string;
   psbStartDate?: Date;
   rvInfectionDate?: Date;
   randomizationDate?: Date;
+  consentDate?: Date;
   monthlyCallDue?: Date;
   resolution?: Date;
   tasks: {
@@ -166,6 +162,7 @@ export const PATIENTS: Patient[] = [
     phaseLabel: 'Screening · Day 0',
     loc: 'CLINIC', lang: 'English', alert: null,
     screeningDate: TODAY,
+    consentDate: TODAY,
     tasks: {
       q: [
         { code: 'CAT', label: 'CAT — COPD Assessment Test', icon: '📋', done: true, note: 'Screening and Rescreening visits only (Table 1)' },
@@ -173,7 +170,7 @@ export const PATIENTS: Patient[] = [
       ],
       pr: [
         { code: 'OSC', label: 'Oscillometry', icon: '🫁', done: true, seq: true, note: 'Perform BEFORE spirometry at all visits with both (fn. f)' },
-        { code: 'SPI', label: 'Spirometry (PRE & POST)', icon: '🫁', done: false, note: 'Washout: short-acting BD 4–6 h · BID 12 h · QD 24 h (fn. f). Pre- and post-SABD at Screening.', dependsOn: ['OSC'] },
+        { code: 'SPI', label: 'Spirometry (PRE & POST)', icon: '🫁', done: false, note: 'Washout: short-acting BD 4–6 h · BID 12 h · QD 24 h (fn. f). Pre- and post-SABD at Screening.', dependsOn: ['OSC'], attestation: 'I confirm that the patient has completed the required washout period (short-acting BD 4–6 h · BID 12 h · QD 24 h) prior to this assessment.' },
         { code: 'ECG', label: 'ECG (12-lead)', icon: '🫀', done: false, note: 'Single ECG at Screening. Collect PRIOR to blood draw (fn. e)' },
         { code: 'VS', label: 'Vital Signs', icon: '🩺', done: false, note: 'BP, HR, body temp, respiratory rate. Seated ≥ 5 min (fn. d)' },
         { code: 'PE', label: 'Physical Exam (incl. height — Screening only)', icon: '🩺', done: false, note: 'Full exam including height (Screening only). Subsequent: limited, symptom-directed, include weight (fn. c)' },
@@ -192,7 +189,8 @@ export const PATIENTS: Patient[] = [
       ]
     },
     ers: [], psb: null, psbRecords: 0,
-    nextVisit: addDays(TODAY, 21), nextVisitLabel: 'PSB Start — Projected (Max 21d)',
+    nextVisit: addDays(TODAY, 21), nextVisitLabel: 'PSB Start (Theoretical)',
+    nextVisitWindow: undefined,
     documents: [
       { id: 'd3', name: 'Informed Consent v2.0', category: 'ICF', extension: 'PDF', uploadDate: TODAY, url: '#', size: '1.2 MB', critical: true },
     ]
@@ -221,6 +219,7 @@ export const PATIENTS: Patient[] = [
     ers: [5, 4, 6, 5, 4, 5, 6, 5, 4, 3, 5, 4, 5, 6, 5, 4, 5, 6, 5, 4, 5, 4, 5, 6, 5, 4, 5, 6, 5, 5],
     psb: 4.9, psbRecords: 30,
     nextVisit: addDays(TODAY, 2), nextVisitLabel: 'Monthly call ±5d (Day 56-58)',
+    nextVisitWindow: 5,
     documents: [
       { id: 'd4', name: 'Informed Consent v1.0', category: 'ICF', extension: 'PDF', uploadDate: addDays(TODAY, -70), url: '#', size: '1.1 MB', critical: true },
     ]
@@ -242,6 +241,7 @@ export const PATIENTS: Patient[] = [
     ers: [6, 5, 7, 6, 5, 6, 7, 5, 4, 6, 7, 6, 5, 6, 7, 8, 6, 5, 6, 7, 6, 5, 4, 6, 7, 6, 5, 6, 7, 6],
     psb: 5.8, psbRecords: 156,
     nextVisit: addDays(TODAY, 112), nextVisitLabel: 'Rescreening Clinic (Week 48)',
+    nextVisitWindow: 7,
     documents: []
   },
   {
@@ -260,7 +260,7 @@ export const PATIENTS: Patient[] = [
         { code: 'OSC', label: 'Oscillometry', icon: '🫁', done: false, seq: true, note: 'Perform BEFORE spirometry if both scheduled (fn. f)' },
         { code: 'CVC', label: 'Central Virology Collection', icon: '🦠', done: false, note: 'Mid-turbinate nasal swab each nostril — qRT-PCR, susceptibility, resistance, genotyping (fn. g)' },
         { code: 'PK', label: 'Sparse PK Sampling — PRIOR to Day 3 dosing', icon: '🩸', done: false, note: '~24 h after last (Day 2) dose. Document sample time AND drug administration time (fn. j)' },
-        { code: 'DRUG', label: 'Study Drug Dosing — Day 3', icon: '💊', done: false, note: 'Once daily', dependsOn: ['CVC', 'PK'] },
+        { code: 'DRUG', label: 'Study Drug Dosing — Day 3', icon: '💊', done: false, note: 'Once daily', dependsOn: ['CVC', 'PK'], requiresData: { label: 'Time of Dose', type: 'time' } },
       ],
       l: [
         { code: 'CSL', label: 'Central Safety Labs — Chemistry / Haematology', icon: '🧪', done: false, note: 'Urinalysis only if clinically indicated at this visit (Table 1)' },
@@ -275,14 +275,15 @@ export const PATIENTS: Patient[] = [
     ers: [8, 7, 9, 10, 11, 12, 11, 10, 9, 8, 9, 10, 11, 12, 11, 10, 9, 10, 11, 12, 11, 10, 9, 8, 9, 10, 11, 12, 11, 13],
     psb: 8.3, psbRecords: 89,
     nextVisit: addDays(TODAY, 4), nextVisitLabel: 'Treatment Day 7 (±1) — Clinic',
+    nextVisitWindow: 1,
     documents: [
       { id: 'd5', name: 'Informed Consent v2.0', category: 'ICF', extension: 'PDF', uploadDate: addDays(TODAY, -137), url: '#', size: '1.2 MB', critical: true },
       { id: 'd6', name: 'Day 1 ECG', category: 'ECG', extension: 'PDF', uploadDate: addDays(TODAY, -3), url: '#', size: '890 KB' },
     ]
   },
   {
-    id: 'HMC-039', name: 'Antonio Lopez', phase: 'TREATMENT', phaseCode: 'tx',
-    phaseLabel: 'Treatment Period · Day 14 (±2)',
+    id: 'HMC-039', name: 'Antonio Lopez', phase: 'FOLLOWUP', phaseCode: 'fu',
+    phaseLabel: 'Follow-up · Day 14 (±2)',
     loc: 'CLINIC', lang: 'Spanish', alert: null,
     screeningDate: addDays(TODAY, -148), psbStartDate: addDays(TODAY, -134),
     rvInfectionDate: addDays(TODAY, -15), randomizationDate: addDays(TODAY, -14),
@@ -295,7 +296,7 @@ export const PATIENTS: Patient[] = [
         { code: 'PE', label: 'Physical Exam — limited, symptom-directed (include weight)', icon: '🩺', done: false, note: 'Post-screening: reduced, symptom-directed. Include weight. Qualified investigator required (fn. c)' },
         { code: 'VS', label: 'Vital Signs', icon: '🩺', done: false, note: 'Seated ≥ 5 min (fn. d)' },
         { code: 'OSC', label: 'Oscillometry', icon: '🫁', done: false, seq: true, note: 'Perform BEFORE spirometry (fn. f)' },
-        { code: 'SPI', label: 'Spirometry', icon: '🫁', done: false, note: 'Washout: short-acting BD 4–6 h · BID 12 h · QD 24 h (fn. f)', dependsOn: ['OSC'] },
+        { code: 'SPI', label: 'Spirometry', icon: '🫁', done: false, note: 'Washout: short-acting BD 4–6 h · BID 12 h · QD 24 h (fn. f)', dependsOn: ['OSC'], attestation: 'I confirm that the patient has completed the required washout period (short-acting BD 4–6 h · BID 12 h · QD 24 h) prior to this assessment.' },
         { code: 'CVC', label: 'Central Virology Collection', icon: '🦠', done: false, note: 'Mid-turbinate nasal swab each nostril (fn. g)' },
       ],
       l: [],
@@ -309,6 +310,7 @@ export const PATIENTS: Patient[] = [
     ers: [9, 8, 10, 11, 12, 13, 12, 11, 10, 9, 10, 11, 10, 9, 8, 7, 8, 9, 8, 7, 7, 8, 9, 8, 7, 7, 8, 8, 8, 7],
     psb: 9.1, psbRecords: 102,
     nextVisit: addDays(TODAY, 14), nextVisitLabel: 'Treatment Day 28 (±3) — Clinic',
+    nextVisitWindow: 3,
     labNote: 'No Central Safety Labs at Day 14 (SoA Table 1). Labs scheduled at: Scr, Re-Scr, D1-PreDose, D3, D7, D28-FUP.',
     documents: [
       { id: 'd7', name: 'Informed Consent v2.0', category: 'ICF', extension: 'PDF', uploadDate: addDays(TODAY, -148), url: '#', size: '1.2 MB', critical: true },
@@ -335,6 +337,7 @@ export const PATIENTS: Patient[] = [
     ers: [4, 3, 5, 4, 3, 4, 5, 4, 3, 4, 5, 4, 3, 4, 5, 3, 4, 5, 4, 3, 4, 5, 4, 3, 4, 5, 4, 3, 4, 4],
     psb: 3.8, psbRecords: 315,
     nextVisit: addDays(TODAY, 21), nextVisitLabel: 'Rescreening Clinic (Week 68)',
+    nextVisitWindow: 7,
     documents: [
       { id: 'd8', name: 'Informed Consent v1.0', category: 'ICF', extension: 'PDF', uploadDate: addDays(TODAY, -469), url: '#', size: '1.1 MB', critical: true },
     ]
@@ -355,7 +358,7 @@ export const PATIENTS: Patient[] = [
         { code: 'PE', label: 'Physical Exam — limited (include weight)', icon: '🩺', done: true, note: 'Symptom-directed. Include weight (fn. c)' },
         { code: 'VS', label: 'Vital Signs', icon: '🩺', done: true, note: 'Seated ≥ 5 min (fn. d)' },
         { code: 'OSC', label: 'Oscillometry', icon: '🫁', done: true, seq: true, note: 'Perform BEFORE spirometry (fn. f)' },
-        { code: 'SPI', label: 'Spirometry', icon: '🫁', done: false, note: 'Washout required (fn. f)', dependsOn: ['OSC'] },
+        { code: 'SPI', label: 'Spirometry', icon: '🫁', done: false, note: 'Washout required (fn. f)', dependsOn: ['OSC'], attestation: 'I confirm that the patient has completed the required washout period (short-acting BD 4–6 h · BID 12 h · QD 24 h) prior to this assessment.' },
         { code: 'CVC', label: 'Central Virology Collection', icon: '🦠', done: true, note: 'Day 28 (fn. g)' },
       ],
       l: [
@@ -371,6 +374,7 @@ export const PATIENTS: Patient[] = [
     ers: [9, 8, 10, 11, 12, 13, 12, 11, 10, 9, 10, 9, 8, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7],
     psb: 9.1, psbRecords: 102,
     nextVisit: addDays(TODAY, 14), nextVisitLabel: 'Day 42 / EOS (±3) — Clinic',
+    nextVisitWindow: 3,
     documents: [
       { id: 'd9', name: 'Informed Consent v2.0', category: 'ICF', extension: 'PDF', uploadDate: addDays(TODAY, -202), url: '#', size: '1.2 MB', critical: true },
     ]
@@ -378,10 +382,10 @@ export const PATIENTS: Patient[] = [
 ];
 
 export const WZ_STEPS = [
-  { title: 'Confirm DTQ Positive', body: 'Patient <strong>ALTESA-047</strong> reported new respiratory symptoms. The <strong>48 h + 6 h randomisation window</strong> is now running. Time-critical.', checks: ['DTQ positive answer documented in eCRF — exact date and time recorded', 'Symptom onset time confirmed with participant', 'PSB eligibility validated: ≥ 3 E-RS records in −35 to −6 day window (ALTESA-047: 94 records ✓)'] },
+  { title: 'Confirm DTQ Positive', body: 'Patient reported new respiratory symptoms. The <strong>48 h + 6 h randomisation window</strong> is now running. Time-critical.', checks: ['DTQ positive answer documented in eCRF — exact date and time recorded', 'Symptom onset time confirmed with participant', 'PSB eligibility validated: ≥ 3 E-RS records in −35 to −6 day window'] },
   { title: 'Contact Participant & Book Clinic', body: 'The participant <strong>must attend clinic within 24 h of symptom onset</strong>. Absolute maximum: <strong>48 h + 6 h</strong>. If unwilling to attend, may self-collect home virology (COVID-19/Flu) and notify site (fn. h).', checks: ['Participant contacted by phone — call time documented', 'Clinic appointment booked within the randomisation window', 'Participant instructed: do not self-medicate prior to clinic visit'] },
   { title: 'POC Test on Site — Before Randomisation', body: 'Perform the <strong>Point-of-Care (POC) RV test using an FDA-cleared diagnostic</strong> prior to randomisation and dosing (fn. g). Also test COVID-19 and Flu.', checks: ['POC RV nasal swab collected and tested on site', 'COVID-19 and Flu status confirmed', 'All POC results documented in eCRF'] },
-  { title: 'Validate PSB & Eligibility', body: 'PSB = <strong>mean of E-RS scores collected −35 to −6 days</strong> before RV onset. Minimum 3 records required. Then assess full randomisation eligibility.', checks: ['PSB window verified: days −35 to −6 before onset', 'PSB value calculated: <strong>7.4</strong> (94 records) — valid', 'Medical & Smoking History reviewed and updated (fn. b)', 'COPD History & Medications updated', 'Eligibility Criteria assessed — Randomisation checklist completed'] },
+  { title: 'Validate PSB & Eligibility', body: 'PSB = <strong>mean of E-RS scores collected −35 to −6 days</strong> before RV onset. Minimum 3 records required. Then assess full randomisation eligibility.', checks: ['PSB window verified: days −35 to −6 before onset', 'PSB value calculated and valid', 'Medical & Smoking History reviewed and updated (fn. b)', 'COPD History & Medications updated', 'Eligibility Criteria assessed — Randomisation checklist completed'] },
   { title: 'Full Pre-Dose Assessments — Day 1', body: 'Complete all Day 1 Pre-Dose clinical assessments per Table 1. ECG must be collected <strong>prior to blood draw</strong>. Vital Signs after seated ≥ 5 min.', checks: ['Physical Exam (limited, include weight — fn. c)', 'Vital Signs: BP, HR, temp, RR — seated ≥ 5 min (fn. d)', 'ECG — PRIOR to blood draw (fn. e)', 'Oscillometry — BEFORE spirometry (fn. f)', 'Spirometry — washout confirmed (fn. f)', 'Home virology testing training reviewed (fn. h)'] },
   { title: 'Sample Collection — Pre-Dose', body: 'Collect all biological samples <strong>before</strong> first dose. Central Virology: <strong>mid-turbinate nasal swab each nostril</strong> (fn. g). PK is pre-dose.', checks: ['Central Virology Collection — nasal swab each nostril ✓', 'Baseline susceptibility and genotyping samples labelled and shipped', 'Sparse PK Sampling — Day 1 Pre-Dose (fn. j)', 'Central Safety Labs: Chemistry / Haematology / Urinalysis', 'Pregnancy Test — URINE sample (WOCBP only, fn. a)', 'Concomitant Medications reviewed by qualified investigator (fn. l)'] },
   { title: 'Randomise & Administer First Dose', body: 'All assessments complete. Randomise and administer first dose. Document the <strong>exact time of dosing</strong>. Activate daily ePRO monitoring.', checks: ['Randomisation completed in IWRS — number assigned', 'Study drug administered — date, time, lot number in eCRF', 'Participant instructed on at-home daily dosing (D2–D6)', 'ePRO activated: E-RS/PGIS and WURSS-11 daily from today', 'Day 3 clinic visit (±1 day) scheduled', 'Adverse Events collection active (fn. k)'] },

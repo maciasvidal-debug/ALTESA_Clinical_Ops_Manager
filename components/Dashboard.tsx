@@ -7,7 +7,6 @@ import {
   ChevronRight, ClipboardList, User, Settings as SettingsIcon,
   LayoutGrid, List, Calendar as CalendarIcon
 } from 'lucide-react';
-import { Virtuoso } from 'react-virtuoso';
 import { 
   type Patient, type Notification, 
   fmtHuman, fmtISO, getTodayPct, countTasks, TODAY 
@@ -108,21 +107,20 @@ export const Dashboard = ({
             <button className={`ftab tab-ok ${dashFilter === 'routine' ? 'active' : ''}`} onClick={() => setDashFilter('routine')}><Check size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Routine ({patients.length - crits.length - warns.length})</button>
           </div>
           
-          <div style={{ flex: 1, maxWidth: '400px', margin: '0 24px' }}>
-            <button className="search-trigger" onClick={onOpenSearch} style={{ width: '100%', margin: 0 }}>
-              <Search size={14} />
-              <span>Search patients, tasks...</span>
-              <span className="search-shortcut">⌘K</span>
+          <div style={{ width: '180px', margin: '0 24px' }}>
+            <button className="search-trigger" onClick={onOpenSearch}>
+              <Search size={14} style={{ flexShrink: 0, color: '#94A3B8' }} />
+              <span style={{ flex: 1, textAlign: 'left', color: '#94A3B8', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis' }}>Search...</span>
             </button>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, justifyContent: 'flex-end' }}>
             <div style={{ display: 'flex', background: '#F1F5F9', padding: '4px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
               <button onClick={() => setViewMode('grid')} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: viewMode === 'grid' ? '#fff' : 'transparent', color: viewMode === 'grid' ? '#0F172A' : '#64748B', boxShadow: viewMode === 'grid' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500 }}><LayoutGrid size={14} /> Grid</button>
               <button onClick={() => setViewMode('list')} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: viewMode === 'list' ? '#fff' : 'transparent', color: viewMode === 'list' ? '#0F172A' : '#64748B', boxShadow: viewMode === 'list' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500 }}><List size={14} /> List</button>
               <button onClick={() => setViewMode('calendar')} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: viewMode === 'calendar' ? '#fff' : 'transparent', color: viewMode === 'calendar' ? '#0F172A' : '#64748B', boxShadow: viewMode === 'calendar' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500 }}><CalendarIcon size={14} /> Calendar</button>
             </div>
-            <button type="button" className="btn btn-primary" style={{ minHeight: '36px', padding: '8px 16px' }} onClick={onOpenAddPatient} title="Add Patient"><UserPlus size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight: '6px'}}/> Add Patient</button>
+            <button type="button" className="btn btn-primary" style={{ height: '36px', padding: '0 16px', whiteSpace: 'nowrap' }} onClick={onOpenAddPatient} title="Add Patient"><UserPlus size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight: '6px'}}/> Add Patient</button>
           </div>
         </div>
         <div className="sec-hdr">
@@ -137,7 +135,7 @@ export const Dashboard = ({
               const isWarn = p.alert && !isCrit;
               const urgClass = isCrit ? 'crit' : isWarn ? 'warn' : done === total && total > 0 ? 'ok' : 'info';
               const urgText = isCrit ? <><AlertTriangle size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> DTQ+ — Act now</> : isWarn ? p.alert === 'MONTHLY_CALL' ? <><Phone size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Call due</> : <><Activity size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Rescreening</> : done === total && total > 0 ? <><Check size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> All done</> : 'In progress';
-              const phBadge = { scr: 'pb-scr', psb: 'pb-psb', tx: 'pb-tx', fu: 'pb-fu', et: 'pb-et' }[p.phaseCode] || 'pb-psb';
+              const phBadge = { scr: 'pb-scr', psb: 'pb-psb', tx: 'pb-tx', fu: 'pb-fu' }[p.phaseCode] || 'pb-psb';
               return (
                 <div key={p.id} className={`pt-row ${isCrit ? 'is-crit' : isWarn ? 'is-warn' : ''}`}
                   tabIndex={0} role="button" aria-label={`Open ${p.id} — ${p.phaseLabel}`}
@@ -164,8 +162,8 @@ export const Dashboard = ({
                         <div className="tl-seg s-scr" title="Screening / Rescreening"><span>SCR</span></div>
                         <div className="tl-seg s-psb" title="Pre-Symptomatic Baseline (Asymptomatic Phase)"><span className="help-term">{p.phaseCode === 'psb' ? 'PSB W' + Math.floor((p.studyDay || 0) / 7) : 'PSB'}</span></div>
                         <div className="tl-seg s-rv" title="RV Infection — Randomisation window"></div>
-                        <div className="tl-seg s-tx" title="Treatment Period D1–D14"><span>{p.phaseCode === 'tx' ? 'Tx D' + (p.studyDay || 0) : 'TX'}</span></div>
-                        <div className="tl-seg s-fu" title="Follow-up Period D14–D42"><span>FUP</span></div>
+                        <div className="tl-seg s-tx" title="Treatment Period D1–D7"><span>{p.phaseCode === 'tx' ? 'Tx D' + (p.studyDay || 0) : 'TX'}</span></div>
+                        <div className="tl-seg s-fu" title="Follow-up Period D8–D42"><span>FUP</span></div>
                         <div className="tl-now-label" style={{ left: `${getTodayPct(p).toFixed(1)}%` }}>Today</div>
                         <div className="tl-now-marker" style={{ left: `${getTodayPct(p).toFixed(1)}%` }}></div>
                       </div>
@@ -173,8 +171,8 @@ export const Dashboard = ({
                         <div className="tl-lbl" style={{ flex: '0 0 10%' }}>Scr</div>
                         <div className="tl-lbl" style={{ flex: '0 0 60%', color: 'var(--blue)' }}>Asymptomatic Phase (up to 68 weeks)</div>
                         <div className="tl-lbl" style={{ flex: '0 0 2%' }}></div>
-                        <div className="tl-lbl" style={{ flex: '0 0 12%' }}>Treatment</div>
-                        <div className="tl-lbl" style={{ flex: '0 0 16%' }}>FUP</div>
+                        <div className="tl-lbl" style={{ flex: '0 0 4.6%' }}>Treatment</div>
+                        <div className="tl-lbl" style={{ flex: '0 0 23.4%' }}>FUP</div>
                       </div>
                     </div>
                   </div>
@@ -202,58 +200,53 @@ export const Dashboard = ({
 
         {viewMode === 'list' && (
           <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '13px' }}>
-              <div style={{ padding: '12px 16px', fontWeight: 600, flex: 2 }}>Patient ID</div>
-              <div style={{ padding: '12px 16px', fontWeight: 600, flex: 3 }}>Name</div>
-              <div style={{ padding: '12px 16px', fontWeight: 600, flex: 2 }}>Phase</div>
-              <div style={{ padding: '12px 16px', fontWeight: 600, flex: 2 }}>Location</div>
-              <div style={{ padding: '12px 16px', fontWeight: 600, flex: 2 }}>Tasks</div>
-              <div style={{ padding: '12px 16px', fontWeight: 600, flex: 2 }}>Status</div>
-            </div>
-            {visible.length > 0 ? (
-              <Virtuoso
-                style={{ height: Math.min(visible.length * 53, 500), width: '100%' }}
-                totalCount={visible.length}
-                itemContent={(index) => {
-                  const p = visible[index];
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', textAlign: 'left', color: '#64748B' }}>
+                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Patient ID</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Name</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Phase</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Location</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Tasks</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600 }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.length > 0 ? visible.map(p => {
                   const { done, total } = countTasks(p);
                   const isCrit = p.alert === 'DTQ_POSITIVE';
                   const isWarn = p.alert && !isCrit;
                   const urgClass = isCrit ? 'crit' : isWarn ? 'warn' : done === total && total > 0 ? 'ok' : 'info';
                   const urgText = isCrit ? <><AlertTriangle size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> DTQ+</> : isWarn ? p.alert === 'MONTHLY_CALL' ? <><Phone size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Call due</> : <><Activity size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Rescreening</> : done === total && total > 0 ? <><Check size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> Done</> : 'In progress';
-                  const phBadge = { scr: 'pb-scr', psb: 'pb-psb', tx: 'pb-tx', fu: 'pb-fu', et: 'pb-et' }[p.phaseCode] || 'pb-psb';
+                  const phBadge = { scr: 'pb-scr', psb: 'pb-psb', tx: 'pb-tx', fu: 'pb-fu' }[p.phaseCode] || 'pb-psb';
                   
                   return (
-                    <div
-                      key={p.id}
-                      style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #E2E8F0', cursor: 'pointer', background: isCrit ? '#FEF2F2' : isWarn ? '#FFFBEB' : '#fff', minHeight: '53px' }}
+                    <tr key={p.id} 
+                      style={{ borderBottom: '1px solid #E2E8F0', cursor: 'pointer', background: isCrit ? '#FEF2F2' : isWarn ? '#FFFBEB' : '#fff' }}
                       onClick={() => onOpenPatient(p.id)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenPatient(p.id); } }}
-                      tabIndex={0}
-                      role="row"
                     >
-                      <div style={{ padding: '12px 16px', fontWeight: 600, color: '#0F172A', flex: 2 }}><DLPWrapper onViolation={onDLPViolation}>{p.id}</DLPWrapper></div>
-                      <div style={{ padding: '12px 16px', color: '#475569', flex: 3 }}><DLPWrapper onViolation={onDLPViolation}>{p.name}</DLPWrapper></div>
-                      <div style={{ padding: '12px 16px', flex: 2 }}><span className={`phase-badge ${phBadge}`} style={{ padding: '2px 8px', fontSize: '11px' }}>{p.phaseLabel.split('·')[0].trim()}</span></div>
-                      <div style={{ padding: '12px 16px', color: '#475569', flex: 2 }}>{p.loc.includes('CLINIC') ? '🏥' : '🏠'} {p.loc}</div>
-                      <div style={{ padding: '12px 16px', flex: 2 }}>
+                      <td style={{ padding: '12px 16px', fontWeight: 600, color: '#0F172A' }}><DLPWrapper onViolation={onDLPViolation}>{p.id}</DLPWrapper></td>
+                      <td style={{ padding: '12px 16px', color: '#475569' }}><DLPWrapper onViolation={onDLPViolation}>{p.name}</DLPWrapper></td>
+                      <td style={{ padding: '12px 16px' }}><span className={`phase-badge ${phBadge}`} style={{ padding: '2px 8px', fontSize: '11px' }}>{p.phaseLabel.split('·')[0].trim()}</span></td>
+                      <td style={{ padding: '12px 16px', color: '#475569' }}>{p.loc.includes('CLINIC') ? '🏥' : '🏠'} {p.loc}</td>
+                      <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <div style={{ width: '60px', height: '6px', background: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
                             <div style={{ height: '100%', background: done === total && total > 0 ? '#10B981' : '#3B82F6', width: `${total > 0 ? (done / total) * 100 : 0}%` }}></div>
                           </div>
                           <span style={{ fontSize: '12px', color: '#64748B' }}>{done}/{total}</span>
                         </div>
-                      </div>
-                      <div style={{ padding: '12px 16px', flex: 2 }}>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
                         <div className={`urg-badge ${urgClass}`} style={{ display: 'inline-flex', padding: '4px 8px' }}>{urgText}</div>
-                      </div>
-                    </div>
+                      </td>
+                    </tr>
                   );
-                }}
-              />
-            ) : (
-              <div style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>No patients found.</div>
-            )}
+                }) : (
+                  <tr><td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>No patients match the current filter.</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
         )}
 

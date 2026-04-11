@@ -6,20 +6,17 @@ import { X, User, UserPlus, Info, AlertTriangle, Globe } from 'lucide-react';
 interface AddPatientModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (id: string, name: string, lang: string) => void;
+  onAdd: (id: string, name: string, lang: string, consentDate: Date) => void;
 }
 
 export const AddPatientModal = ({ isOpen, onClose, onAdd }: AddPatientModalProps) => {
   const [id, setId] = useState('');
   const [name, setName] = useState('');
   const [lang, setLang] = useState('English');
+  const [consentDateStr, setConsentDateStr] = useState(new Date().toISOString().split('T')[0]);
   const [err, setErr] = useState('');
 
   if (!isOpen) return null;
-
-  // Default format but configurable, e.g. "^[A-Z]{3}-\\d{3}$" could be passed via settings.
-  // We use a robust default that ensures structure if not overridden.
-  const ID_REGEX = /^[A-Z]{6}-\d{3}$/;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,17 +24,11 @@ export const AddPatientModal = ({ isOpen, onClose, onAdd }: AddPatientModalProps
       setErr('Please fill in all required fields.');
       return;
     }
-
-    // Strict Enrolment Validation (Six Sigma - Defect Reduction)
-    if (!ID_REGEX.test(id.trim())) {
-      setErr('Invalid format. ID must follow the sponsor nomenclature (e.g., ALTESA-002).');
-      return;
-    }
-
-    onAdd(id.trim(), name.trim(), lang);
+    onAdd(id.trim(), name.trim(), lang, new Date(consentDateStr + 'T00:00:00'));
     setId('');
     setName('');
     setLang('English');
+    setConsentDateStr(new Date().toISOString().split('T')[0]);
     setErr('');
   };
 
@@ -86,7 +77,7 @@ export const AddPatientModal = ({ isOpen, onClose, onAdd }: AddPatientModalProps
                 <span>Enter the patient&apos;s legal name as it appears on study documents.</span>
               </div>
             </div>
-            <div>
+            <div style={{ marginBottom: '24px' }}>
               <label className="modal-label"><Globe size={12} /> Primary Language</label>
               <select 
                 className="modal-input"
@@ -101,6 +92,20 @@ export const AddPatientModal = ({ isOpen, onClose, onAdd }: AddPatientModalProps
               <div className="modal-help">
                 <Info size={14} />
                 <span>Sets the default language for ePRO questionnaires and patient-facing materials.</span>
+              </div>
+            </div>
+            <div style={{ marginBottom: '24px' }}>
+              <label className="modal-label">Consent Date (Screening Start)</label>
+              <input 
+                type="date" 
+                className="modal-input"
+                value={consentDateStr} 
+                onChange={e => setConsentDateStr(e.target.value)}
+                required
+              />
+              <div className="modal-help">
+                <Info size={14} />
+                <span>The date the Informed Consent Form was signed. This marks the start of the Screening period.</span>
               </div>
             </div>
           </div>
