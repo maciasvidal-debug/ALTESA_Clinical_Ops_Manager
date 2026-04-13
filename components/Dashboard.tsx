@@ -151,12 +151,6 @@ export const Dashboard = ({
                     <div className="pt-phase-lbl">
                       <span className={`phase-badge ${phBadge}`} style={{ padding: '1px 7px', fontSize: '10px' }}>{p.phaseLabel.split('·')[0].trim()}</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                      <div className="pt-progress-container" style={{ flex: 1, marginTop: 0 }} title={`${done}/${total} tasks completed`}>
-                        <div className={`pt-progress-fill ${done === total && total > 0 ? 'done' : ''}`} style={{ width: `${total > 0 ? (done / total) * 100 : 0}%` }}></div>
-                      </div>
-                      <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--t3)', minWidth: '28px', textAlign: 'right' }}>{total > 0 ? Math.round((done / total) * 100) : 0}%</span>
-                    </div>
                     <div className="pt-loc">{p.loc.includes('CLINIC') ? '🏥' : '🏠'} {p.loc}</div>
                   </div>
                   <div className="pt-tl-cell">
@@ -181,7 +175,13 @@ export const Dashboard = ({
                   </div>
                   <div className="pt-action">
                     <div className={`pt-urgency ${urgClass}`}>{urgText}</div>
-                    <div className="pt-tasks-count"><strong>{done}</strong>/{total} tasks ({total > 0 ? Math.round((done / total) * 100) : 0}%)</div>
+                    <div className="pt-tasks-count"><strong>{done}</strong>/{total} tasks</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', justifyContent: 'flex-end', marginTop: '2px', marginBottom: '2px' }}>
+                      <div className="pt-progress-container" style={{ width: '60px', marginTop: 0 }} title={`${done}/${total} tasks completed`}>
+                        <div className={`pt-progress-fill ${done === total && total > 0 ? 'done' : ''}`} style={{ width: `${total > 0 ? (done / total) * 100 : 0}%` }}></div>
+                      </div>
+                      <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--t3)', minWidth: '24px', textAlign: 'right' }}>{total > 0 ? Math.round((done / total) * 100) : 0}%</span>
+                    </div>
                     <div className="pt-next" title={fmtISO(p.nextVisit)}>{fmtHuman(p.nextVisit)}</div>
                     <div className="pt-chevron"><ChevronRight size={16} /></div>
                   </div>

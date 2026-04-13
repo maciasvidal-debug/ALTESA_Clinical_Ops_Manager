@@ -108,10 +108,10 @@ abbr[title] { text-decoration: underline dotted var(--border2); cursor: help; te
 .auth-note strong { color: var(--blue); }
 
 /* ─── HEADER ─── */
-.hdr { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: grid; grid-template-columns: 1fr minmax(200px, 480px) 1fr; align-items: center; gap: 24px; position: sticky; top: 0; z-index: 100; }
-.hdr-left { display: flex; align-items: center; gap: 12px; }
-.hdr-center { display: flex; justify-content: center; width: 100%; }
-.hdr-right { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.hdr { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; }
+.hdr-left { display: flex; align-items: center; gap: 12px; flex: 1; }
+.hdr-center { display: flex; justify-content: center; flex: 2; gap: 8px; }
+.hdr-right { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex: 1; }
 .wordmark { font-family: var(--fd); font-size: 18px; }
 .wordmark em { color: var(--blue); font-style: normal; }
 .hdr-context { font-size: 11.5px; color: var(--t3); border-left: 1px solid var(--border); padding-left: 10px; }
