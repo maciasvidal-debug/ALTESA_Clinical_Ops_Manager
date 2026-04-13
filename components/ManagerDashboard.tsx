@@ -6,7 +6,7 @@ import {
   Activity, Shield, Calendar, ChevronRight, 
   Search, Filter, MessageSquare, Lock, FileText, Key,
   TrendingUp, Map, List, LayoutGrid, Upload, X, Terminal, Download, LifeBuoy,
-  PieChart as PieChartIcon, BarChart as BarChartIcon, LineChart as LineChartIcon
+  PieChart as PieChartIcon, BarChart as BarChartIcon, LineChart as LineChartIcon, Settings
 } from 'lucide-react';
 import { Patient, countTasks, TODAY, diffDays, fmtHuman, addDays } from '@/lib/data';
 import { DLPWrapper } from '@/components/DLPWrapper';
@@ -27,7 +27,7 @@ interface ManagerDashboardProps {
 }
 
 export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, isChecked, onOpenPatient, onImportPatients }: ManagerDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'tracker' | 'risk' | 'analytics' | 'queries' | 'recovery'>('tracker');
+  const [activeTab, setActiveTab] = useState<'tracker' | 'risk' | 'analytics' | 'queries' | 'settings'>('tracker');
   const [trackerView, setTrackerView] = useState<'board' | 'grid' | 'calendar'>('board');
   const [siteFilter, setSiteFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -375,7 +375,6 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
           <button className={`ftab ${activeTab === 'risk' ? 'active' : ''}`} style={{ color: activeTab === 'risk' ? '#fff' : '#94A3B8', background: activeTab === 'risk' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('risk')}><AlertTriangle size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Risk Intelligence</button>
           <button className={`ftab ${activeTab === 'analytics' ? 'active' : ''}`} style={{ color: activeTab === 'analytics' ? '#fff' : '#94A3B8', background: activeTab === 'analytics' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('analytics')}><BarChart2 size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Analytics</button>
           <button className={`ftab ${activeTab === 'queries' ? 'active' : ''}`} style={{ color: activeTab === 'queries' ? '#fff' : '#94A3B8', background: activeTab === 'queries' ? '#334155' : 'transparent', border: 'none', position: 'relative', zIndex: tourStep === 3 ? 1000 : 1, boxShadow: tourStep === 3 ? '0 0 0 2px #8B5CF6' : 'none' }} onClick={() => setActiveTab('queries')}><MessageSquare size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Queries</button>
-          <button className={`ftab ${activeTab === 'recovery' ? 'active' : ''}`} style={{ color: activeTab === 'recovery' ? '#fff' : '#94A3B8', background: activeTab === 'recovery' ? '#334155' : 'transparent', border: 'none' }} onClick={() => setActiveTab('recovery')}><LifeBuoy size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Recovery Tool</button>
         </div>
         <div className="hdr-right" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button 
@@ -390,38 +389,22 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
             {tourStep === 1 && (
               <div style={{ position: 'absolute', top: '45px', right: '0', background: '#78350F', color: '#fff', padding: '16px', borderRadius: '8px', width: '320px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.2)', textAlign: 'left' }}>
                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#FCD34D', marginBottom: '4px' }}>STEP 1 OF 3</div>
-                <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Export Public Key</div>
-                <div style={{ fontSize: '13px', color: '#FEF3C7', marginBottom: '12px' }}>Export your public key and send it to your Coordinators so they can encrypt data for you.</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Security Settings</div>
+                <div style={{ fontSize: '13px', color: '#FEF3C7', marginBottom: '12px' }}>Access your security settings to export your public key and generate PIN recovery codes for your Coordinators.</div>
                 <button onClick={nextTourStep} style={{ background: '#F59E0B', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>Next <ChevronRight size={14} /></button>
               </div>
             )}
             <button 
               type="button" 
-              className="btn btn-secondary" 
-              style={{ minHeight: '32px', padding: '6px 12px', fontSize: '13px', background: 'transparent', color: '#94A3B8', border: '1px solid #334155' }} 
+              className={`btn ${activeTab === 'settings' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ minHeight: '32px', padding: '6px 12px', fontSize: '13px', background: activeTab === 'settings' ? '#38BDF8' : '#334155', color: activeTab === 'settings' ? '#0F172A' : '#fff', border: 'none', borderRadius: '6px' }} 
               onClick={() => {
-                if (!managerKeys) {
-                  alert("Manager keys not initialized.");
-                  return;
-                }
-                const keyData = JSON.stringify({
-                  encPublicKey: managerKeys.encPublicKey,
-                  signPublicKey: managerKeys.signPublicKey
-                });
-                const blob = new Blob([keyData], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `Manager_Public_Key.txt`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                setActiveTab('settings');
                 if (tourStep === 1) nextTourStep();
               }} 
-              title="Export Public Key"
+              title="Security Settings"
             >
-              <Shield size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Export Key
+              <Settings size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Settings
             </button>
           </div>
           <div style={{ position: 'relative', zIndex: tourStep === 2 ? 1000 : 1, boxShadow: tourStep === 2 ? '0 0 0 4px rgba(56, 189, 248, 0.5)' : 'none', borderRadius: '6px' }}>
@@ -433,7 +416,7 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
                 <button onClick={nextTourStep} style={{ background: '#0EA5E9', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>Next <ChevronRight size={14} /></button>
               </div>
             )}
-            <button type="button" className="btn btn-primary" style={{ minHeight: '32px', padding: '6px 12px', fontSize: '13px', background: '#38BDF8', color: '#0F172A', border: 'none' }} onClick={() => { setSyncModalOpen(true); if (tourStep === 2) nextTourStep(); }} title="Import Data"><FileText size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Data Sync</button>
+            <button type="button" className="btn btn-primary" style={{ minHeight: '32px', padding: '6px 12px', fontSize: '13px', background: '#38BDF8', color: '#0F172A', border: 'none', borderRadius: '6px' }} onClick={() => { setSyncModalOpen(true); if (tourStep === 2) nextTourStep(); }} title="Import Data"><FileText size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Data Sync</button>
           </div>
           <button type="button" className="ibtn" style={{ border: 'none', background: 'transparent', color: '#94A3B8' }} onClick={onLock} title="Lock Session"><Lock size={14} /></button>
         </div>
@@ -833,9 +816,57 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
           </div>
         )}
 
-        {/* Recovery Tool */}
-        {activeTab === 'recovery' && (
-          <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+        {/* Security Settings */}
+        {activeTab === 'settings' && (
+          <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            
+            {/* Export Key Section */}
+            <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '32px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                <div style={{ background: '#FEF3C7', padding: '12px', borderRadius: '12px' }}>
+                  <Key size={24} color="#D97706" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#0F172A', margin: 0 }}>Export Public Key</h3>
+                  <p style={{ fontSize: '14px', color: '#64748B', margin: '4px 0 0 0' }}>Share this key with Coordinators to allow them to encrypt data for you</p>
+                </div>
+              </div>
+              
+              <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '8px', border: '1px dashed #CBD5E1', marginBottom: '24px' }}>
+                <p style={{ fontSize: '13px', color: '#475569', margin: 0, lineHeight: 1.5 }}>
+                  Your public key is required by Coordinators to securely encrypt patient data before sending it to you. 
+                  Exporting this key is safe; it cannot be used to decrypt data.
+                </p>
+              </div>
+
+              <button 
+                className="btn btn-primary" 
+                style={{ width: '100%', padding: '12px', fontSize: '14px', background: '#F59E0B', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600 }}
+                onClick={() => {
+                  if (!managerKeys) {
+                    alert("Manager keys not initialized.");
+                    return;
+                  }
+                  const keyData = JSON.stringify({
+                    encPublicKey: managerKeys.encPublicKey,
+                    signPublicKey: managerKeys.signPublicKey
+                  });
+                  const blob = new Blob([keyData], { type: 'text/plain' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `Manager_Public_Key.txt`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                <Shield size={16} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'6px'}}/> Download Public Key
+              </button>
+            </div>
+
+            {/* PIN Recovery Section */}
             <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '32px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
                 <div style={{ background: '#F0F9FF', padding: '12px', borderRadius: '12px' }}>
