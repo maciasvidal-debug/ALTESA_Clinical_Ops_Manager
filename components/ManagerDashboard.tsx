@@ -87,6 +87,16 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncLogs, setSyncLogs] = useState<string[]>([]);
 
+  // Audit Log State
+  const [auditLogs] = useState([
+    { timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), event: 'Manager keys generated and stored securely.', type: 'security' },
+    { timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), event: 'Public key exported for Coordinator distribution.', type: 'transfer' },
+    { timestamp: new Date(Date.now() - 3600000 * 5).toISOString(), event: 'Data sync initiated. 2 encrypted packages received.', type: 'transfer' },
+    { timestamp: new Date(Date.now() - 3600000 * 5 + 2000).toISOString(), event: 'Signature verification successful for SITE-A.', type: 'security' },
+    { timestamp: new Date(Date.now() - 3600000 * 5 + 4000).toISOString(), event: 'Payload decrypted successfully. 8 patient records updated.', type: 'transfer' },
+    { timestamp: new Date(Date.now() - 1800000).toISOString(), event: 'PIN Recovery challenge generated for Coordinator.', type: 'security' },
+  ]);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -1007,6 +1017,29 @@ export function ManagerDashboard({ patients, queries, onLock, onDLPViolation, is
                   </p>
                 </div>
               )}
+            </div>
+
+            {/* Security Audit Log */}
+            <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '32px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', marginTop: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                <div style={{ background: '#F1F5F9', padding: '12px', borderRadius: '12px' }}>
+                  <Terminal size={24} color="#475569" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#0F172A', margin: 0 }}>Security Audit Log</h3>
+                  <p style={{ fontSize: '14px', color: '#64748B', margin: '4px 0 0 0' }}>Review recent security-related events and data transfer activities</p>
+                </div>
+              </div>
+
+              <div style={{ background: '#0F172A', borderRadius: '8px', padding: '16px', maxHeight: '300px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '12px', color: '#10B981', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.5)' }}>
+                {auditLogs.map((log, i) => (
+                  <div key={i} style={{ marginBottom: '8px', lineHeight: 1.4, display: 'flex', gap: '12px' }}>
+                    <span style={{ color: '#64748B', flexShrink: 0 }}>[{new Date(log.timestamp).toISOString().replace('T', ' ').substring(0, 19)}]</span>
+                    <span style={{ color: log.type === 'security' ? '#F59E0B' : '#38BDF8', flexShrink: 0 }}>[{log.type.toUpperCase()}]</span>
+                    <span style={{ color: '#F8FAFC' }}>{log.event}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
