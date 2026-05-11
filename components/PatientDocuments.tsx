@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { Upload, FilePlus, AlertTriangle, FileText, FileCheck, Download, Trash2 } from 'lucide-react';
-import { TODAY, fmtHuman, type Patient } from '@/lib/data';
+import { getToday, fmtISO, fmtHuman, type Patient } from '@/lib/data';
 import { DLPWrapper } from './DLPWrapper';
 
 interface PatientDocumentsProps {
@@ -27,7 +27,7 @@ export const PatientDocuments = ({ patient, onUpdate, onDLPViolation }: PatientD
         name: f.name,
         category: (f.name.toLowerCase().includes('consent') || f.name.toLowerCase().includes('icf')) ? 'ICF' : 'OTHER' as any,
         extension: f.name.split('.').pop()?.toUpperCase() || 'FILE',
-        uploadDate: TODAY,
+        uploadDate: fmtISO(getToday()),
         url: '#',
         size: `${(f.size / 1024).toFixed(1)} KB`,
         critical: f.name.toLowerCase().includes('consent') || f.name.toLowerCase().includes('icf')
