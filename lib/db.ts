@@ -1,4 +1,5 @@
-import localforage, { type LocalForage } from 'localforage';
+import localforage from 'localforage';
+type LocalForage = typeof localforage;
 import { Patient, ProtocolAmendment } from './data';
 
 // Initialize instances for different data domains
