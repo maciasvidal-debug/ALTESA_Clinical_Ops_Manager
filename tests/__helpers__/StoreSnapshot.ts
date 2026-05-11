@@ -6,7 +6,8 @@
  * conditions without relying on store.length() (which loses key identity).
  */
 
-import type { LocalForage } from 'localforage';
+import localforage from 'localforage';
+type LocalForage = typeof localforage;
 import { expect } from 'vitest';
 
 export interface StoreCapture {

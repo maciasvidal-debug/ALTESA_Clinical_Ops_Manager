@@ -8,7 +8,8 @@
  * Provides deterministic fault injection via `failOnNthCall()`.
  */
 
-import type { LocalForage } from 'localforage';
+import localforage from 'localforage';
+type LocalForage = typeof localforage;
 
 type FaultErrorType = 'QuotaExceededError' | 'UnknownError' | 'AbortError';
 
@@ -73,8 +74,8 @@ export class FakeStore implements LocalForage {
     return this.storage.size;
   }
 
-  async key(keyIndex: number): Promise<string | null> {
-    return [...this.storage.keys()][keyIndex] ?? null;
+  async key(keyIndex: number): Promise<string> {
+    return ([...this.storage.keys()][keyIndex] ?? '') as string;
   }
 
   async keys(): Promise<string[]> {
@@ -83,13 +84,13 @@ export class FakeStore implements LocalForage {
 
   async iterate<T, U>(
     iteratee: (value: T, key: string, iterationNumber: number) => U
-  ): Promise<U | undefined> {
+  ): Promise<U> {
     let i = 0;
     for (const [k, v] of this.storage) {
       const result = iteratee(v as T, k, ++i);
       if (result !== undefined) return result;
     }
-    return undefined;
+    return undefined as unknown as U;
   }
 
   // ── Required LocalForage interface stubs ───────────────────────────────────
@@ -106,6 +107,9 @@ export class FakeStore implements LocalForage {
   async defineDriver(_driver: object): Promise<void> {}
   async dropInstance(_config?: object): Promise<void> { this.storage.clear(); }
 
-  config(_options: any): any   { return this; }
+  getDriver(_driver: string)  { return Promise.resolve({} as any); }
+  getSerializer()             { return Promise.resolve({} as any); }
+
+  config(): any { return this; }
   createInstance(_config?: any): LocalForage { return new FakeStore(); }
 }

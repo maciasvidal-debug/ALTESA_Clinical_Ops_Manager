@@ -5,7 +5,8 @@
  * Uses property assignment rather than vi.spyOn to guarantee interception
  * regardless of how localforage defines its methods (own vs prototype).
  */
-import type { LocalForage } from 'localforage';
+import localforage from 'localforage';
+type LocalForage = typeof localforage;
 
 export type FaultOperation = 'setItem' | 'clear' | 'getItem' | 'removeItem';
 export type FaultErrorType =
