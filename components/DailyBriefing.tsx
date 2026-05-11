@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Calendar, Clock, AlertTriangle, ChevronRight, CheckCircle2, Hospital } from 'lucide-react';
-import { fmtHuman, fmtISO, TODAY, diffDays, type Patient } from '@/lib/data';
+import { fmtHuman, fmtISO, getToday, diffDays, type Patient } from '@/lib/data';
 import { DLPWrapper } from '@/components/DLPWrapper';
 
 export function DailyBriefing({ patients, onClose, onSelectPatient, onDLPViolation }: { patients: Patient[], onClose: () => void, onSelectPatient: (id: string) => void, onDLPViolation: (action: string) => void }) {
@@ -14,7 +14,7 @@ export function DailyBriefing({ patients, onClose, onSelectPatient, onDLPViolati
     const allTasks = [...(p.tasks.q || []), ...(p.tasks.pr || []), ...(p.tasks.l || []), ...(p.tasks.ad || [])];
     allTasks.forEach(t => {
       if (!t.done && t.dueDate) {
-        const diff = diffDays(TODAY, t.dueDate);
+        const diff = diffDays(getToday(), t.dueDate);
         if (diff < 0) {
           overdueTasks.push({ pid: p.id, task: t, diff: Math.abs(diff) });
         }
@@ -28,7 +28,7 @@ export function DailyBriefing({ patients, onClose, onSelectPatient, onDLPViolati
         <div className="briefing-hdr">
           <div className="briefing-title">Good morning, Coordinator</div>
           <div className="briefing-sub">
-            <Calendar size={14} /> {fmtHuman(TODAY)}, {fmtISO(TODAY)}
+            <Calendar size={14} /> {fmtHuman(getToday())}, {fmtISO(getToday())}
             <span style={{ margin: '0 8px', opacity: 0.3 }}>|</span>
             <Clock size={14} /> Shift Summary
           </div>

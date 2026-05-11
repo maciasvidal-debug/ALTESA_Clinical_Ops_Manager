@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { 
   type Patient, type Notification, 
-  fmtHuman, fmtISO, getTodayPct, countTasks, TODAY 
+  fmtHuman, fmtISO, getTodayPct, countTasks, getToday 
 } from '@/lib/data';
 import { DLPWrapper } from '@/components/DLPWrapper';
 
@@ -75,10 +75,13 @@ export const Dashboard = ({
         <div className="hdr-right" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div className="nav-group" style={{ display: 'flex', gap: '8px' }}>
             <button type="button" className="ibtn" onClick={onOpenBriefing} title="Daily Briefing"><ClipboardList size={16} style={{marginRight: '6px'}} /> Briefing</button>
-            <button type="button" className="ibtn relative" onClick={onOpenNotif} title="Notifications">
-              <Bell size={16} />
+            <button type="button" className="ibtn relative" onClick={onOpenNotif}
+              title="Notifications"
+              aria-label={`Notifications${notifications.filter(n => !n.read).length > 0 ? `, ${notifications.filter(n => !n.read).length} unread` : ''}`}
+            >
+              <Bell size={16} aria-hidden="true" />
               {notifications.filter(n => !n.read).length > 0 && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white" aria-hidden="true"></span>
               )}
             </button>
           </div>
@@ -109,23 +112,23 @@ export const Dashboard = ({
           
           <div style={{ width: '180px', margin: '0 24px' }}>
             <button className="search-trigger" onClick={onOpenSearch}>
-              <Search size={14} style={{ flexShrink: 0, color: '#94A3B8' }} />
-              <span style={{ flex: 1, textAlign: 'left', color: '#94A3B8', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis' }}>Search...</span>
+              <Search size={14} style={{ flexShrink: 0, color: 'var(--t3)' }} />
+              <span style={{ flex: 1, textAlign: 'left', color: 'var(--t3)', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis' }}>Search...</span>
             </button>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, justifyContent: 'flex-end' }}>
             <div style={{ display: 'flex', background: '#F1F5F9', padding: '4px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-              <button onClick={() => setViewMode('grid')} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: viewMode === 'grid' ? '#fff' : 'transparent', color: viewMode === 'grid' ? '#0F172A' : '#64748B', boxShadow: viewMode === 'grid' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500 }}><LayoutGrid size={14} /> Grid</button>
-              <button onClick={() => setViewMode('list')} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: viewMode === 'list' ? '#fff' : 'transparent', color: viewMode === 'list' ? '#0F172A' : '#64748B', boxShadow: viewMode === 'list' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500 }}><List size={14} /> List</button>
-              <button onClick={() => setViewMode('calendar')} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: viewMode === 'calendar' ? '#fff' : 'transparent', color: viewMode === 'calendar' ? '#0F172A' : '#64748B', boxShadow: viewMode === 'calendar' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500 }}><CalendarIcon size={14} /> Calendar</button>
+              <button onClick={() => setViewMode('grid')} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: viewMode === 'grid' ? '#fff' : 'transparent', color: viewMode === 'grid' ? 'var(--t1)' : 'var(--t3)', boxShadow: viewMode === 'grid' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500 }}><LayoutGrid size={14} /> Grid</button>
+              <button onClick={() => setViewMode('list')} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: viewMode === 'list' ? '#fff' : 'transparent', color: viewMode === 'list' ? 'var(--t1)' : 'var(--t3)', boxShadow: viewMode === 'list' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500 }}><List size={14} /> List</button>
+              <button onClick={() => setViewMode('calendar')} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', background: viewMode === 'calendar' ? '#fff' : 'transparent', color: viewMode === 'calendar' ? 'var(--t1)' : 'var(--t3)', boxShadow: viewMode === 'calendar' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500 }}><CalendarIcon size={14} /> Calendar</button>
             </div>
             <button type="button" className="btn btn-primary" style={{ height: '36px', padding: '0 16px', whiteSpace: 'nowrap' }} onClick={onOpenAddPatient} title="Add Patient"><UserPlus size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight: '6px'}}/> Add Patient</button>
           </div>
         </div>
         <div className="sec-hdr">
           <div className="sec-title">{visible.length} patient{visible.length !== 1 ? 's' : ''} — sorted by urgency</div>
-          <div className="sec-date">{fmtHuman(TODAY)}, {fmtISO(TODAY)}</div>
+          <div className="sec-date">{fmtHuman(getToday())}, {fmtISO(getToday())}</div>
         </div>
         {viewMode === 'grid' && (
           <div className="pt-list">
@@ -142,8 +145,13 @@ export const Dashboard = ({
                   onClick={() => onOpenPatient(p.id)}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenPatient(p.id); } }}>
                   <div className="pt-meta">
-                    <div className="pt-id">
+                    <div className="pt-id" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <DLPWrapper onViolation={onDLPViolation}>{p.id}</DLPWrapper>
+                      {p.siteId && (
+                        <span style={{ fontSize: '9px', fontWeight: 700, background: '#E0F2FE', color: '#0369A1', padding: '1px 5px', borderRadius: '3px', letterSpacing: '0.04em' }}>
+                          {p.siteId}
+                        </span>
+                      )}
                     </div>
                     <div className="pt-name" style={{fontSize:'11px', color:'var(--t3)', marginTop:'2px'}}>
                       <DLPWrapper onViolation={onDLPViolation}>{p.name}</DLPWrapper>
@@ -205,7 +213,7 @@ export const Dashboard = ({
           <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
-                <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', textAlign: 'left', color: '#64748B' }}>
+                <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', textAlign: 'left', color: 'var(--t3)' }}>
                   <th style={{ padding: '12px 16px', fontWeight: 600 }}>Patient ID</th>
                   <th style={{ padding: '12px 16px', fontWeight: 600 }}>Name</th>
                   <th style={{ padding: '12px 16px', fontWeight: 600 }}>Phase</th>
@@ -228,7 +236,7 @@ export const Dashboard = ({
                       style={{ borderBottom: '1px solid #E2E8F0', cursor: 'pointer', background: isCrit ? '#FEF2F2' : isWarn ? '#FFFBEB' : '#fff' }}
                       onClick={() => onOpenPatient(p.id)}
                     >
-                      <td style={{ padding: '12px 16px', fontWeight: 600, color: '#0F172A' }}><DLPWrapper onViolation={onDLPViolation}>{p.id}</DLPWrapper></td>
+                      <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--t1)' }}><DLPWrapper onViolation={onDLPViolation}>{p.id}</DLPWrapper></td>
                       <td style={{ padding: '12px 16px', color: '#475569' }}><DLPWrapper onViolation={onDLPViolation}>{p.name}</DLPWrapper></td>
                       <td style={{ padding: '12px 16px' }}><span className={`phase-badge ${phBadge}`} style={{ padding: '2px 8px', fontSize: '11px' }}>{p.phaseLabel.split('·')[0].trim()}</span></td>
                       <td style={{ padding: '12px 16px', color: '#475569' }}>{p.loc.includes('CLINIC') ? '🏥' : '🏠'} {p.loc}</td>
@@ -237,7 +245,7 @@ export const Dashboard = ({
                           <div style={{ width: '60px', height: '6px', background: '#E2E8F0', borderRadius: '3px', overflow: 'hidden' }}>
                             <div style={{ height: '100%', background: done === total && total > 0 ? '#10B981' : '#3B82F6', width: `${total > 0 ? (done / total) * 100 : 0}%` }}></div>
                           </div>
-                          <span style={{ fontSize: '12px', color: '#64748B' }}>{done}/{total} ({total > 0 ? Math.round((done / total) * 100) : 0}%)</span>
+                          <span style={{ fontSize: '12px', color: 'var(--t3)' }}>{done}/{total} ({total > 0 ? Math.round((done / total) * 100) : 0}%)</span>
                         </div>
                       </td>
                       <td style={{ padding: '12px 16px' }}>
@@ -246,7 +254,7 @@ export const Dashboard = ({
                     </tr>
                   );
                 }) : (
-                  <tr><td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>No patients match the current filter.</td></tr>
+                  <tr><td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'var(--t3)' }}>No patients match the current filter.</td></tr>
                 )}
               </tbody>
             </table>
@@ -256,13 +264,13 @@ export const Dashboard = ({
         {viewMode === 'calendar' && (
           <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#0F172A', margin: 0 }}>Upcoming Schedule</h3>
-              <div style={{ fontSize: '14px', color: '#64748B' }}>{fmtHuman(TODAY)}</div>
+              <h3 style={{ fontSize: '18px', fontFamily: 'var(--fd)', fontWeight: 600, color: 'var(--t1)', margin: 0 }}>Upcoming Schedule</h3>
+              <div style={{ fontSize: '14px', color: 'var(--t3)' }}>{fmtHuman(getToday())}</div>
             </div>
             
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '12px' }}>
               {[0, 1, 2, 3, 4, 5, 6].map(offset => {
-                const date = new Date(TODAY);
+                const date = new Date(getToday());
                 date.setDate(date.getDate() + offset);
                 const isToday = offset === 0;
                 
@@ -271,10 +279,10 @@ export const Dashboard = ({
                 
                 return (
                   <div key={offset} style={{ border: `1px solid ${isToday ? '#3B82F6' : '#E2E8F0'}`, borderRadius: '8px', padding: '12px', background: isToday ? '#EFF6FF' : '#fff', minHeight: '150px' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: isToday ? '#1E3A8A' : '#64748B', marginBottom: '4px', textTransform: 'uppercase' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: isToday ? '#1E3A8A' : 'var(--t3)', marginBottom: '4px', textTransform: 'uppercase' }}>
                       {date.toLocaleDateString('en-US', { weekday: 'short' })}
                     </div>
-                    <div style={{ fontSize: '18px', fontWeight: 700, color: isToday ? '#1E3A8A' : '#0F172A', marginBottom: '12px' }}>
+                    <div style={{ fontSize: '24px', fontFamily: 'var(--fd)', fontWeight: 700, color: isToday ? '#1E3A8A' : 'var(--t1)', marginBottom: '12px' }}>
                       {date.getDate()}
                     </div>
                     
@@ -285,7 +293,7 @@ export const Dashboard = ({
                           <div 
                             key={p.id} 
                             onClick={() => onOpenPatient(p.id)}
-                            style={{ padding: '6px 8px', background: isCrit ? '#FEF2F2' : '#F1F5F9', borderLeft: `3px solid ${isCrit ? '#EF4444' : '#3B82F6'}`, borderRadius: '4px', fontSize: '11px', cursor: 'pointer', color: isCrit ? '#991B1B' : '#334155', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                            style={{ padding: '6px 8px', background: isCrit ? '#FEF2F2' : '#F1F5F9', borderLeft: `3px solid ${isCrit ? '#EF4444' : '#3B82F6'}`, borderRadius: '4px', fontSize: '11px', cursor: 'pointer', color: isCrit ? '#991B1B' : 'var(--t2)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                             title={p.name}
                           >
                             {p.id} {isCrit && '⚠️'}
@@ -293,10 +301,10 @@ export const Dashboard = ({
                         );
                       })}
                       {dayPatients.length > 3 && (
-                        <div style={{ fontSize: '11px', color: '#64748B', textAlign: 'center', marginTop: '4px' }}>+{dayPatients.length - 3} more</div>
+                        <div style={{ fontSize: '11px', color: 'var(--t3)', textAlign: 'center', marginTop: '4px' }}>+{dayPatients.length - 3} more</div>
                       )}
                       {dayPatients.length === 0 && (
-                        <div style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>No tasks</div>
+                        <div style={{ fontSize: '11px', color: 'var(--t3)', fontStyle: 'italic' }}>No tasks</div>
                       )}
                     </div>
                   </div>

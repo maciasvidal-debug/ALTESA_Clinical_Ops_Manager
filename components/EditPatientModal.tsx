@@ -8,10 +8,11 @@ interface EditPatientModalProps {
   isOpen: boolean;
   onClose: () => void;
   patient: Patient | null;
+  protocolVersions?: { id: string; label: string; releaseDate: string; status: 'active' | 'legacy' }[];
   onUpdate: (data: Partial<Patient>) => void;
 }
 
-export const EditPatientModal = ({ isOpen, onClose, patient, onUpdate }: EditPatientModalProps) => {
+export const EditPatientModal = ({ isOpen, onClose, patient, protocolVersions = [], onUpdate }: EditPatientModalProps) => {
   const [data, setData] = useState<Partial<Patient>>({});
   const [err, setErr] = useState('');
   const [prevPatientId, setPrevPatientId] = useState<string | null>(null);
@@ -21,7 +22,8 @@ export const EditPatientModal = ({ isOpen, onClose, patient, onUpdate }: EditPat
     setData({
       name: patient.name,
       lang: patient.lang,
-      loc: patient.loc
+      loc: patient.loc,
+      protocolVersion: patient.protocolVersion
     });
   }
 
@@ -89,6 +91,26 @@ export const EditPatientModal = ({ isOpen, onClose, patient, onUpdate }: EditPat
                 <option value="HOME→CLINIC">HOME→CLINIC</option>
               </select>
             </div>
+            {protocolVersions && protocolVersions.length > 0 && (
+              <div style={{ marginBottom: '24px' }}>
+                <label className="modal-label">Protocol Amendment Version</label>
+                <select 
+                  className="modal-input"
+                  value={data.protocolVersion || ''} 
+                  onChange={e => setData({ ...data, protocolVersion: e.target.value })}
+                >
+                  <option value="">(Not Set)</option>
+                  {protocolVersions.map(pv => (
+                    <option key={pv.id} value={pv.id}>
+                      {pv.id} - {pv.label} {pv.status === 'active' ? '(Current)' : '(Legacy)'}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ fontSize: '12px', color: '#64748B', marginTop: '6px' }}>
+                  If you change the amendment version, the patient&apos;s schedule and rules will update going forward.
+                </div>
+              </div>
+            )}
           </div>
           <div className="modal-footer">
             <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>

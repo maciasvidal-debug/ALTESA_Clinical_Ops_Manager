@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
-  PATIENTS, fmtHuman, fmtISO, getTodayPct, TODAY, diffDays, addDays, 
-  GLOSSARY, WZ_STEPS,
+  PATIENTS, fmtHuman, fmtISO, getTodayPct, getToday, diffDays, addDays, 
+  GLOSSARY, WZ_STEPS, PROTOCOL_AMENDMENTS, type ProtocolAmendment,
   type Patient, type Notification, type Document, type Task
 } from '@/lib/data';
 import { 
@@ -11,15 +11,16 @@ import {
   Check, ArrowRight, Delete, X, Info, User, Globe, Mail, Hospital, Clock,
   HelpCircle, Phone, Activity, ChevronRight, ArrowUp, ArrowDown, Link,
   ChevronDown, Plus, FileEdit, ArrowLeft, Circle, FileText, BarChart2,
-  CheckCircle2, CheckCircle, Calendar, Flag, Microscope, Home, Wind, Pill, MessageSquare
+  CheckCircle2, CheckCircle, Calendar, Flag, Microscope, Home, Wind, Pill, MessageSquare,
+  Stethoscope, Droplet, Bug, TestTubes, FlaskConical, Beaker, GraduationCap, Heart, BadgeCheck
 } from 'lucide-react';
 
 // Components
 import { Auth } from '@/components/Auth';
 import { Dashboard } from '@/components/Dashboard';
 import { PatientDetail } from '@/components/PatientDetail';
+import { NavigatorLog } from '@/components/NavigatorLog';
 import { DependencyLines } from '@/components/DependencyLines';
-import { PatientDocuments } from '@/components/PatientDocuments';
 import { CmdPalette } from '@/components/CmdPalette';
 import { HelpModal } from '@/components/HelpModal';
 import { DailyBriefing } from '@/components/DailyBriefing';
@@ -34,22 +35,100 @@ import { Toasts } from '@/components/Toasts';
 import { Wizard } from '@/components/Wizard';
 import { RescreeningWizard } from '@/components/RescreeningWizard';
 import { DLPWrapper } from '@/components/DLPWrapper';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { checkTaskCompletion } from '@/lib/task-utils';
+import { classifyFirebaseError, shouldClearOnRevocation } from '@/lib/auth-utils';
+
+const LungIcon = ({ size = 16, color = "currentColor", strokeWidth = 2, ...props }: any) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M12 2v5" />
+    <path d="M12 7c-2.5 0-4.5 2-4.5 4.5v5c0 1.5-1 2.5-2.5 2.5S2 18 2 16.5v-3C2 12 4 10 6.5 10c1.5 0 2.5 1 2.5 2.5v1" />
+    <path d="M12 7c2.5 0 4.5 2 4.5 4.5v5c0 1.5 1 2.5 2.5 2.5S22 18 22 16.5v-3c0-2-2-4-4.5-4-1.5 0-2.5 1-2.5 2.5v1" />
+  </svg>
+);
 
 const IconMap: Record<string, any> = {
   Bell, ClipboardList, AlertTriangle, Search, Lock, UserPlus, 
   Check, ArrowRight, Delete, X, Info, User, Globe, Mail, Hospital, Clock,
   Home, Wind, Pill, Activity, Phone, Calendar, Flag, Microscope, FileText,
   CheckCircle2, Circle, Plus, FileEdit, ArrowLeft, ArrowUp, ArrowDown, Link,
-  ChevronDown, ChevronRight, '📋': ClipboardList, '📝': FileText, '🫁': Activity,
-  '🫀': Activity, '🩺': Activity, '🧪': Microscope, '📄': FileText, '✅': CheckCircle2,
-  '💊': Pill, '🎓': Info, '🔔': Bell, '💨': Wind, '📞': Phone, '🏥': Hospital,
-  '🦠': Activity, '🩸': Activity, '⚠️': AlertTriangle
+  ChevronDown, ChevronRight, Stethoscope, Droplet, Bug, TestTubes, FlaskConical, Beaker, GraduationCap, Heart, BadgeCheck,
+  '📋': ClipboardList, '📝': FileText, '🫁': LungIcon,
+  '🫀': Heart, '🩺': Stethoscope, '🧪': Beaker, '📄': FileText, '✅': BadgeCheck,
+  '💊': Pill, '🎓': GraduationCap, '🔔': Bell, '💨': Wind, '📞': Phone, '🏥': Hospital,
+  '🦠': Bug, '🩸': Droplet, '⚠️': AlertTriangle
 };
 
 export default function App() {
-  const [patients, setPatients] = useState<Patient[]>(() => 
-    PATIENTS.map(p => ({ ...p, studyDay: diffDays(p.screeningDate, TODAY) }))
-  );
+  const [isLoadingDb, setIsLoadingDb] = useState(true);
+  /**
+   * 🕵️ 100ms threshold rule: IndexedDB typically resolves in 10–50ms.
+   * Showing a spinner for < 200ms causes a disorienting flash (worse than
+   * no spinner). showDbLoader only activates after 200ms; if load completes
+   * before that, the user never sees the loading screen.
+   */
+  const [showDbLoader, setShowDbLoader] = useState(false);
+  useEffect(() => {
+    if (!isLoadingDb) { setShowDbLoader(false); return; }
+    const t = setTimeout(() => setShowDbLoader(true), 200);
+    return () => clearTimeout(t);
+  }, [isLoadingDb]);
+  const [protocolVersions, setProtocolVersions] = useState<ProtocolAmendment[]>(PROTOCOL_AMENDMENTS);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  
+  useEffect(() => {
+    async function initDB() {
+      const { 
+        getAllProtocols, 
+        getAllPatients, 
+        initializeDbWithDefaults 
+      } = await import('@/lib/db');
+      
+      try {
+        await initializeDbWithDefaults(PATIENTS, PROTOCOL_AMENDMENTS);
+        
+        const protocolsList = await getAllProtocols();
+        if (protocolsList.length > 0) {
+          setProtocolVersions(protocolsList);
+        }
+        
+        const patientsList = await getAllPatients();
+        setPatients(patientsList.map(p => ({ ...p, studyDay: diffDays(p.screeningDate, getToday()) })));
+      } catch {
+        // SbD: log operation context only — never log the err object (may expose storage internals).
+        console.error('[ALTESA:DB] Storage initialization failed — running in offline fallback mode.');
+        // Fall back to reference data so the app remains usable, but surface a visible
+        // warning so no coordinator mistakes demo data for live patient records.
+        setPatients(PATIENTS.map(p => ({ ...p, studyDay: diffDays(p.screeningDate, getToday()) })));
+        // showToast is a stable useCallback([]) — safe to call from this effect after mount.
+        showToast('Local database unavailable. Showing reference data only — reopen the app to retry.', 'warn');
+      } finally {
+        setIsLoadingDb(false);
+      }
+    }
+    if (typeof window !== 'undefined') {
+      initDB();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isLoadingDb) {
+      import('@/lib/db').then(({ saveAllProtocols }) => {
+        saveAllProtocols(protocolVersions).catch(() =>
+          console.error('[ALTESA:DB] Protocol version sync failed.')
+        );
+      });
+    }
+  }, [protocolVersions, isLoadingDb]);
+
+  useEffect(() => {
+    if (!isLoadingDb) {
+      import('@/lib/db').then(({ savePatient }) => {
+        patients.forEach(p => savePatient(p));
+      });
+    }
+  }, [patients, isLoadingDb]);
+
   const [screen, setScreen] = useState<'auth' | 'dashboard' | 'patient' | 'manager_dashboard' | 'settings'>('auth');
   const [role, setRole] = useState<'coordinator' | 'manager'>('coordinator');
   const [authMode, setAuthMode] = useState<'crc' | 'manager'>('crc');
@@ -76,7 +155,6 @@ export default function App() {
   const [screeningOutcomeOpen, setScreeningOutcomeOpen] = useState(false);
   
   const [dashFilter, setDashFilter] = useState<'all' | 'crit' | 'warn' | 'routine'>('all');
-  const [activeTab, setActiveTab] = useState<'checklist' | 'documents'>('checklist');
   
   const [chkd, setChkd] = useState<Record<string, Set<string>>>({});
   
@@ -113,7 +191,7 @@ export default function App() {
   const [queryDraft, setQueryDraft] = useState({ pid: '', taskCode: '', issue: '' });
 
   const [editPatientOpen, setEditPatientOpen] = useState(false);
-  const [editPatientData, setEditPatientData] = useState<{name: string, lang: string, loc: string} | null>(null);
+  const [editPatientData, setEditPatientData] = useState<{name: string, lang: string, loc: string, protocolVersion?: string} | null>(null);
 
   const [toasts, setToasts] = useState<{id: number, msg: string, type: string}[]>([]);
   const [isActivated, setIsActivated] = useState<boolean>(false);
@@ -124,10 +202,50 @@ export default function App() {
   useEffect(() => {
     setHasMounted(true);
     if (typeof window !== 'undefined') {
-      setIsActivated(localStorage.getItem('altesa_activated') === 'true');
-      setIsStudyInit(!!localStorage.getItem('altesa_study_secret'));
-      setHasPin(!!localStorage.getItem('altesa_crc_pin'));
+      import('@/lib/db').then(({ configStore }) => {
+        Promise.all([
+          configStore.getItem('altesa_activated'),
+          configStore.getItem('altesa_study_secret'),
+          configStore.getItem('altesa_crc_pin_hash')
+        ]).then(([activated, secret, pinHash]) => {
+          setIsActivated(activated === 'true');
+          setIsStudyInit(!!secret);
+          setHasPin(!!pinHash);
+        });
+      });
     }
+  }, []);
+
+  // Firebase session watcher — handles credential revocation from the console.
+  // If Firebase signs the user out (e.g. password changed by admin), the next
+  // time the app needs re-activation or PIN recovery it will be blocked.
+  // Active sessions using PIN only are NOT interrupted mid-session (online-first
+  // only for activation; PIN works offline once established).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    // 🛠️ Race condition fix: if the component unmounts before the async import
+    // chain resolves, the cleanup function runs with unsubscribe === undefined.
+    // The `cancelled` flag prevents registering the listener after unmount,
+    // and the ref ensures cleanup can always call it if it was registered.
+    let cancelled = false;
+    const unsubscribeRef = { current: undefined as (() => void) | undefined };
+
+    import('@/lib/firebase').then(({ auth }) => {
+      import('firebase/auth').then(({ onAuthStateChanged }) => {
+        if (cancelled) return; // component already unmounted
+        unsubscribeRef.current = onAuthStateChanged(auth, (user) => {
+          if (shouldClearOnRevocation(user, isStudyInit, screen)) {
+            setIsStudyInit(false);
+            setIsActivated(false);
+          }
+        });
+      });
+    });
+    return () => {
+      cancelled = true;
+      unsubscribeRef.current?.();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const toastIdRef = useRef(0);
 
@@ -158,7 +276,7 @@ export default function App() {
       return { 
         ...p, 
         alert: null,
-        labNote: `Rescreening completed on ${fmtISO(TODAY)}. Eligibility re-verified for Week ${Math.floor((p.studyDay || 0) / 7)} milestone.`
+        labNote: `Rescreening completed on ${fmtISO(getToday())}. Eligibility re-verified for Week ${Math.floor((p.studyDay || 0) / 7)} milestone.`
       };
     }));
     setRescreeningOpen(false);
@@ -252,10 +370,23 @@ export default function App() {
     showToast(`DLP Policy: ${action === 'copy' ? 'Copying' : action === 'cut' ? 'Cutting' : 'Dragging'} sensitive patient data is disabled to prevent data leakage.`, 'dlp-alert');
   };
 
-  const sendEmailNotification = useCallback((notif: Notification) => {
+  const sendEmailNotification = useCallback((_notif: Notification) => {
     if (!emailEnabled) return;
-    console.log(`[EMAIL SIMULATION] To: coordinator@example.com | Subject: ${notif.title} | Body: ${notif.message}`);
-    // In a real app, this would call an API route that uses SendGrid/Nodemailer
+    /**
+     * Email dispatch — NOT YET IMPLEMENTED.
+     *
+     * ⚠️  PHI POLICY: Never log, print, or expose _notif.title or _notif.message
+     * client-side. These fields contain patient identifiers and clinical alert
+     * content that qualifies as Protected Health Information (PHI).
+     *
+     * Implementation contract:
+     *   - Dispatch via an authenticated server-side API route (POST /api/notify).
+     *   - The server constructs the email body; no PHI payload crosses to the client log.
+     *   - Audit the dispatch event by notification ID and type only — never by content.
+     *
+     * The underscore prefix on _notif signals this parameter is intentionally
+     * unused in the current stub. Remove the prefix when wiring the API call.
+     */
   }, [emailEnabled]);
 
   const toggleReview = (pid: string, code: string) => {
@@ -290,12 +421,16 @@ export default function App() {
     showToast('Query opened successfully', 'ok');
   };
 
-  const isChecked = useCallback((pid: string, code: string) => {
-    const p = patients.find(x => x.id === pid);
-    if (!p) return false;
-    const all = [...(p.tasks.q || []), ...(p.tasks.pr || []), ...(p.tasks.l || []), ...(p.tasks.ad || [])];
-    return chkd[pid]?.has(code) || all.find(t => t.code === code)?.done || false;
-  }, [patients, chkd]);
+  // ⚡ OPT-1: O(1) patient lookup — avoids O(n) patients.find on every isChecked call.
+  // isChecked is called ~160×/cycle (n_patients × n_tasks). Previously: O(n) scan each time.
+  const patientMap = useMemo(
+    () => new Map(patients.map(p => [p.id, p])),
+    [patients]
+  );
+
+  const isChecked = useCallback((pid: string, code: string) =>
+    checkTaskCompletion(pid, code, patientMap, chkd),
+  [patientMap, chkd]);
 
   const isBlocked = useCallback((pid: string, task: any) => {
     if (!task.dependsOn || task.dependsOn.length === 0) return false;
@@ -314,7 +449,7 @@ export default function App() {
           type: 'critical',
           title: 'Critical Alert: DTQ Positive',
           message: `Patient ${p.id} has confirmed symptom onset. RV Protocol activated.`,
-          timestamp: TODAY,
+          timestamp: getToday(),
           read: false,
           patientId: p.id
         });
@@ -325,7 +460,7 @@ export default function App() {
           type: 'alert',
           title: 'Monthly Call Due',
           message: `Patient ${p.id} is due for their monthly follow-up call.`,
-          timestamp: TODAY,
+          timestamp: getToday(),
           read: false,
           patientId: p.id
         });
@@ -335,7 +470,7 @@ export default function App() {
       const allTasks = [...(p.tasks.q || []), ...(p.tasks.pr || []), ...(p.tasks.l || []), ...(p.tasks.ad || [])];
       allTasks.forEach(t => {
         if (!isChecked(p.id, t.code) && t.dueDate) {
-          const diff = diffDays(TODAY, t.dueDate);
+          const diff = diffDays(getToday(), t.dueDate);
           if (diff < 0) {
             const id = `overdue-${p.id}-${t.code}`;
             newNotifs.push({
@@ -354,7 +489,7 @@ export default function App() {
               type: 'critical',
               title: 'Critical Task Due Today',
               message: `${t.label} for patient ${p.id} must be completed today.`,
-              timestamp: TODAY,
+              timestamp: getToday(),
               read: false,
               patientId: p.id
             });
@@ -394,39 +529,74 @@ export default function App() {
     setRole('coordinator');
     setScreen('dashboard');
     
-    if (typeof window !== 'undefined' && !localStorage.getItem('altesa_briefed_today')) {
-      setBriefingOpen(true);
-      localStorage.setItem('altesa_briefed_today', fmtISO(TODAY));
+    if (typeof window !== 'undefined') {
+      import('@/lib/db').then(({ configStore }) => {
+        configStore.getItem('altesa_briefed_today').then(briefed => {
+          if (!briefed) {
+            setBriefingOpen(true);
+            configStore.setItem('altesa_briefed_today', fmtISO(getToday()));
+          }
+        });
+      });
     }
   }, []);
 
-  const handlePin = useCallback((k: string) => {
+  const handlePin = useCallback(async (k: string) => {
     if (k === 'del') {
       setPin(prev => prev.slice(0, -1));
       setPinErr('');
     } else if (k.startsWith('manager_unlock:')) {
-      const pass = k.split(':')[1];
-      showToast('Manager Unlock Triggered', 'info');
-      if (pass.length >= 12) {
+      const pass = k.split(':').slice(1).join(':'); // Preserve colons in passphrase
+      if (pass.length < 12) {
+        showToast('Passphrase too short (min 12 characters)', 'error');
+        return;
+      }
+      const { keysStore } = await import('@/lib/db');
+      const { derivePINHash, generateSalt } = await import('@/lib/crypto');
+      const stored = await keysStore.getItem<{ hash: string; salt: string } | null>('altesa_manager_pass_hash');
+      if (!stored) {
+        // First access: register passphrase (Trust On First Use)
+        const salt = generateSalt();
+        const hash = await derivePINHash(pass, salt);
+        await keysStore.setItem('altesa_manager_pass_hash', { hash, salt });
         setRole('manager');
         setScreen('manager_dashboard');
-        showToast('Manager Vault Decrypted', 'ok');
+        showToast('Manager Passphrase registered and vault unlocked', 'ok');
       } else {
-        showToast('Passphrase too short', 'error');
+        // Subsequent access: verify against stored PBKDF2 hash
+        const inputHash = await derivePINHash(pass, stored.salt);
+        if (inputHash === stored.hash) {
+          setRole('manager');
+          setScreen('manager_dashboard');
+          showToast('Manager Vault Decrypted', 'ok');
+        } else {
+          showToast('Invalid Manager Passphrase', 'error');
+        }
       }
     } else if (k === 'reset_pin') {
+      const { configStore } = await import('@/lib/db');
+      await configStore.removeItem('altesa_crc_pin_hash');
+      await configStore.removeItem('altesa_crc_pin_salt');
       setPin('');
       setPinErr('');
-      localStorage.removeItem('altesa_crc_pin');
       setHasPin(false);
       showToast('Recovery Successful. Please enter a new PIN.', 'ok');
     } else if (k === 'go') {
-      const storedPin = localStorage.getItem('altesa_crc_pin');
-      if (pin === storedPin) {
-        setPinErr('');
-        handleLoginSuccess();
+      const { configStore } = await import('@/lib/db');
+      const storedHash = await configStore.getItem<string>('altesa_crc_pin_hash');
+      const storedSalt = await configStore.getItem<string>('altesa_crc_pin_salt');
+      if (storedHash && storedSalt) {
+        const { derivePINHash } = await import('@/lib/crypto');
+        const inputHash = await derivePINHash(pin, storedSalt);
+        if (inputHash === storedHash) {
+          setPinErr('');
+          handleLoginSuccess();
+        } else {
+          setPinErr('Invalid PIN');
+          setPin('');
+        }
       } else {
-        setPinErr('Invalid PIN');
+        setPinErr('PIN not configured. Please use recovery.');
         setPin('');
       }
     } else {
@@ -533,9 +703,9 @@ export default function App() {
     });
   };
 
-  const handleAddPatient = (id: string, name: string, lang: string, consentDate: Date) => {
+  const handleAddPatient = (id: string, siteId: string, name: string, lang: string, consentDate: Date, protocolVersion: string) => {
     const newPatient: Patient = {
-      id, name, lang,
+      id, siteId, name, lang, protocolVersion,
       phase: 'SCREENING', phaseCode: 'scr', phaseLabel: 'Screening · Day 0',
       loc: 'CLINIC', alert: null,
       screeningDate: consentDate,
@@ -581,7 +751,7 @@ export default function App() {
     if (!selPatientId || !editPatientData) return;
     
     setModalErr('');
-    const { name, lang, loc } = editPatientData;
+    const { name, lang, loc, protocolVersion } = editPatientData;
     
     if (!name.trim()) {
       setModalErr('Name is required');
@@ -597,7 +767,7 @@ export default function App() {
 
     setPatients(prev => prev.map(p => {
       if (p.id === selPatientId) {
-        return { ...p, name: name.trim(), lang, loc };
+        return { ...p, name: name.trim(), lang, loc, protocolVersion };
       }
       return p;
     }));
@@ -644,50 +814,122 @@ export default function App() {
   // Prevent hydration mismatch
   if (!hasMounted) return null;
 
+  // 🎨 DB Loading — skeleton screen with 200ms threshold gate.
+  // Only shown if IndexedDB takes > 200ms (unusual on modern hardware).
+  // Skeleton mimics the app shell to prevent layout shift on transition.
+  if (isLoadingDb && showDbLoader) {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        aria-label="Initializing local database"
+        aria-busy="true"
+        style={{
+          height: '100vh', display: 'flex', flexDirection: 'column',
+          background: '#F1F5F9', animation: 'fadeIn 150ms ease',
+        }}
+      >
+        {/* Skeleton header */}
+        <div style={{ height: '56px', background: '#fff', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', padding: '0 24px', gap: '16px' }}>
+          <div style={{ width: '72px', height: '20px', background: '#E2E8F0', borderRadius: '4px', animation: 'shimmer 1.4s ease-in-out infinite' }} />
+          <div style={{ flex: 1 }} />
+          <div style={{ width: '32px', height: '32px', background: '#E2E8F0', borderRadius: '6px', animation: 'shimmer 1.4s ease-in-out infinite' }} />
+          <div style={{ width: '32px', height: '32px', background: '#E2E8F0', borderRadius: '6px', animation: 'shimmer 1.4s ease-in-out infinite' }} />
+        </div>
+        {/* Skeleton content */}
+        <div style={{ flex: 1, padding: '32px 24px', maxWidth: '960px', margin: '0 auto', width: '100%' }}>
+          {/* Summary row */}
+          <div style={{ display: 'flex', gap: '16px', marginBottom: '32px' }}>
+            {[100, 80, 90, 75].map((w, i) => (
+              <div key={i} style={{ flex: 1, height: '72px', background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ width: `${w}%`, height: '20px', background: '#E2E8F0', borderRadius: '4px', animation: 'shimmer 1.4s ease-in-out infinite' }} />
+                <div style={{ width: '40%', height: '12px', background: '#F1F5F9', borderRadius: '4px', animation: 'shimmer 1.4s ease-in-out infinite' }} />
+              </div>
+            ))}
+          </div>
+          {/* Patient card skeletons */}
+          {[1, 2, 3].map(i => (
+            <div key={i} style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '16px 20px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{ width: '8px', height: '48px', background: '#E2E8F0', borderRadius: '4px', animation: 'shimmer 1.4s ease-in-out infinite' }} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ width: '30%', height: '14px', background: '#E2E8F0', borderRadius: '4px', animation: 'shimmer 1.4s ease-in-out infinite' }} />
+                <div style={{ width: '55%', height: '12px', background: '#F1F5F9', borderRadius: '4px', animation: 'shimmer 1.4s ease-in-out infinite' }} />
+              </div>
+              <div style={{ width: '72px', height: '24px', background: '#E2E8F0', borderRadius: '20px', animation: 'shimmer 1.4s ease-in-out infinite' }} />
+            </div>
+          ))}
+        </div>
+        {/* Shimmer + fadeIn keyframes — globals.css has spin but not shimmer */}
+        <style>{`
+          @keyframes shimmer {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.45; }
+          }
+          @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        `}</style>
+      </div>
+    );
+  }
+
   // Auth Screen
   if (screen === 'auth') {
     return (
       <Auth 
         pin={pin} 
         pinErr={pinErr} 
-        onPin={handlePin} 
-        onRecovery={async (challenge, response) => {
-          const { validateResponse } = await import('@/lib/security');
-          return await validateResponse(challenge, response);
-        }}
-        isActivated={isActivated}
+        onPin={handlePin}
         isStudyInit={isStudyInit}
-        onInitStudy={async (configJson) => {
-          const { initializeStudyConfig } = await import('@/lib/security');
-          const success = initializeStudyConfig(configJson);
-          if (success) {
-            setIsStudyInit(true);
-            showToast('Study Configuration Loaded', 'ok');
-          }
-          return success;
-        }}
-        onActivate={async (siteId, code) => {
-          const { verifyActivation, getHardwareFingerprint } = await import('@/lib/security');
-          const deviceId = getHardwareFingerprint();
-          const success = await verifyActivation(siteId, deviceId, code);
-          if (success) {
-            localStorage.setItem('altesa_activated', 'true');
-            localStorage.setItem('altesa_site_id', siteId);
-            setIsActivated(true);
-            showToast(`Site ${siteId} Activated Successfully`, 'ok');
-          }
-          return success;
-        }}
         hasPin={hasPin}
-        onSetupPin={async (newPin, response, challenge) => {
-          const { validateResponse } = await import('@/lib/security');
-          const success = await validateResponse(challenge, response);
-          if (success) {
-            localStorage.setItem('altesa_crc_pin', newPin);
-            setHasPin(true);
-            showToast('PIN Activated and Saved', 'ok');
+        onFirebaseLogin={async (email, password, role) => {
+          try {
+            const { signInWithEmailAndPassword } = await import('firebase/auth');
+            const { auth } = await import('@/lib/firebase');
+            const credential = await signInWithEmailAndPassword(auth, email, password);
+            const user = credential.user;
+
+            const { initializeFromFirebaseUser } = await import('@/lib/security');
+            await initializeFromFirebaseUser(user.uid, user.email ?? email);
+
+            setIsStudyInit(true);
+            setIsActivated(true);
+
+            const { configStore } = await import('@/lib/db');
+            const pinHash = await configStore.getItem<string>('altesa_crc_pin_hash');
+            setHasPin(!!pinHash);
+
+            if (role === 'manager') {
+              setRole('manager');
+              setScreen('manager_dashboard');
+              showToast('Manager Vault Unlocked', 'ok');
+            } else {
+              showToast('Session authenticated', 'ok');
+            }
+            return { success: true };
+          } catch (err: any) {
+            const code: string = err?.code ?? '';
+            return { success: false, error: classifyFirebaseError(code) };
           }
-          return success;
+        }}
+        onRecovery={async (email, password) => {
+          try {
+            const { signInWithEmailAndPassword } = await import('firebase/auth');
+            const { auth } = await import('@/lib/firebase');
+            await signInWithEmailAndPassword(auth, email, password);
+            return true;
+          } catch {
+            return false;
+          }
+        }}
+        onSetupPin={async (newPin) => {
+          const { configStore } = await import('@/lib/db');
+          const { derivePINHash, generateSalt } = await import('@/lib/crypto');
+          const salt = generateSalt();
+          const hash = await derivePINHash(newPin, salt);
+          await configStore.setItem('altesa_crc_pin_hash', hash);
+          await configStore.setItem('altesa_crc_pin_salt', salt);
+          setHasPin(true);
+          showToast('PIN Activated and Saved', 'ok');
+          return true;
         }}
       />
     );
@@ -696,18 +938,29 @@ export default function App() {
   // Settings Screen
   if (screen === 'settings') {
     return (
-      <Settings 
-        patients={patients} 
-        onClose={() => setScreen('dashboard')} 
-        onImportQueries={(importedQueries) => {
-          setQueries(prev => {
-            const map = new Map(prev.map(q => [q.id, q]));
-            importedQueries.forEach(q => map.set(q.id, q));
+      <ErrorBoundary context="Settings">
+        <Settings 
+          patients={patients} 
+          onClose={() => setScreen('dashboard')} 
+          onImportQueries={(importedQueries) => {
+            setQueries(prev => {
+              const map = new Map(prev.map(q => [q.id, q]));
+              importedQueries.forEach(q => map.set(q.id, q));
             return Array.from(map.values());
           });
           showToast(`Successfully imported ${importedQueries.length} queries.`, 'ok');
         }}
+        onImportAmendments={(amendments) => {
+          // Idempotent merge: incoming versions upsert by ID, local-only versions are preserved
+          setProtocolVersions(prev => {
+            const map = new Map(prev.map(a => [a.id, a]));
+            amendments.forEach(a => map.set(a.id, a));
+            return Array.from(map.values());
+          });
+          showToast(`Successfully imported ${amendments.length} protocol amendments.`, 'ok');
+        }}
       />
+    </ErrorBoundary>
     );
   }
 
@@ -724,17 +977,30 @@ export default function App() {
   if (screen === 'manager_dashboard') {
     return (
       <>
+      <ErrorBoundary context="ManagerDashboard">
         <ManagerDashboard 
           patients={patients} 
           queries={queries}
+          protocolVersions={protocolVersions}
+          setProtocolVersions={setProtocolVersions}
           onLock={() => { setScreen('auth'); setPassphrase(''); setRole('coordinator'); setAuthMode('crc'); }} 
+          onOpenHelp={() => setHelpOpen(true)}
           onDLPViolation={handleDLPViolation} 
           isChecked={isChecked}
           onOpenPatient={openPatient}
           onImportPatients={handleImportPatients}
         />
+      </ErrorBoundary>
         <Toasts toasts={toasts} />
         {cmdOpen && <CmdPalette q={cmdQ} setQ={setCmdQ} onClose={() => setCmdOpen(false)} onSelect={(id: string) => { if (id === 'dashboard') setScreen('dashboard'); else openPatient(id); }} patients={patients} recentIds={recentIds} onDLPViolation={handleDLPViolation} />}
+        {(helpOpen || showWelcome) && (
+          <HelpModal 
+            onClose={() => { setHelpOpen(false); setShowWelcome(false); }} 
+            initialTab={showWelcome ? 'guide' : 'guide'} 
+            onDLPViolation={handleDLPViolation}
+            role={role}
+          />
+        )}
       </>
     );
   }
@@ -775,6 +1041,7 @@ export default function App() {
             isOpen={addPatientOpen}
             onClose={() => setAddPatientOpen(false)}
             onAdd={handleAddPatient}
+            protocolVersions={protocolVersions}
           />
         )}
         {selPatientId && (
@@ -841,6 +1108,26 @@ export default function App() {
                       <option value="HOME→CLINIC">HOME→CLINIC</option>
                     </select>
                   </div>
+                  {protocolVersions && protocolVersions.length > 0 && (
+                    <div style={{ marginBottom: '24px' }}>
+                      <label className="modal-label"><FileText size={12} /> Protocol Amendment Version</label>
+                      <select 
+                        className="modal-input"
+                        value={editPatientData.protocolVersion || ''} 
+                        onChange={e => setEditPatientData({ ...editPatientData, protocolVersion: e.target.value })}
+                      >
+                        <option value="">(Not Set)</option>
+                        {protocolVersions.map(pv => (
+                          <option key={pv.id} value={pv.id}>
+                            {pv.id} - {pv.label} {pv.status === 'active' ? '(Current)' : '(Legacy)'}
+                          </option>
+                        ))}
+                      </select>
+                      <div style={{ fontSize: '12px', color: '#64748B', marginTop: '6px' }}>
+                        If you change the amendment version, the patient&apos;s schedule and rules will update going forward.
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="modal-footer">
                   <button type="button" className="ibtn" onClick={() => { setEditPatientOpen(false); setModalErr(""); }}>Cancel</button>
@@ -872,7 +1159,7 @@ export default function App() {
                     </button>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
                       <input type="checkbox" checked={emailEnabled} onChange={e => setEmailEnabled(e.target.checked)} />
-                      <Mail size={12} /> Email Alerts
+                      <Mail size={12} aria-hidden="true" /> Email Alerts
                     </label>
                   </div>
                 </div>
@@ -930,6 +1217,8 @@ export default function App() {
           <HelpModal 
             onClose={() => { setHelpOpen(false); setShowWelcome(false); }} 
             initialTab={showWelcome ? 'guide' : 'guide'} 
+            onDLPViolation={handleDLPViolation}
+            role={role}
           />
         )}
         
@@ -957,7 +1246,7 @@ export default function App() {
   if (p.rvInfectionDate) milestones.push({ l: 'RV Onset', d: p.rvInfectionDate, cls: 'ms-done' });
   if (p.randomizationDate) milestones.push({ l: 'Randomisation', d: p.randomizationDate, cls: 'ms-done' });
   if (p.resolution) milestones.push({ l: 'Resolution', d: p.resolution, cls: 'ms-done' });
-  milestones.push({ l: `Today — ${displayPhaseLabel}`, d: TODAY, cls: 'ms-now' });
+  milestones.push({ l: `Today — ${displayPhaseLabel}`, d: getToday(), cls: 'ms-now' });
   if (p.nextVisit) milestones.push({ l: p.nextVisitLabel, d: p.nextVisit, cls: 'ms-next' });
 
   const renderGroup = (label: string, items: any[]) => {
@@ -1081,7 +1370,7 @@ export default function App() {
                           </button>
                         )}
                         
-                        {t.dueDate && diffDays(TODAY, t.dueDate) <= 0 && !chk && (
+                        {t.dueDate && diffDays(getToday(), t.dueDate) <= 0 && !chk && (
                           <span 
                             style={{ 
                               display: 'inline-block', 
@@ -1232,7 +1521,7 @@ export default function App() {
     );
   };
 
-  const dtc = diffDays(TODAY, p.nextVisit);
+  const dtc = diffDays(getToday(), p.nextVisit);
   const win = p.nextVisitWindow || 0;
   const winPct = win > 0 ? Math.min(100, Math.max(0, 50 + (dtc / (win * 2)) * 100)) : 50;
   const wc = win > 0 
@@ -1302,7 +1591,7 @@ export default function App() {
                   className="ibtn" 
                   style={{ marginLeft: '12px', padding: '4px 8px', minHeight: '28px', fontSize: '11px', display: 'inline-flex' }}
                   onClick={() => {
-                    setEditPatientData({ name: p.name, lang: p.lang, loc: p.loc });
+                    setEditPatientData({ name: p.name, lang: p.lang, loc: p.loc, protocolVersion: p.protocolVersion });
                     setEditPatientOpen(true);
                     setModalErr('');
                   }}
@@ -1313,9 +1602,15 @@ export default function App() {
             </div>
             <div className="pv-id-sub">
               <span className={`phase-badge ${phBadge}`}>{displayPhaseLabel}</span>
+              {p.protocolVersion && (
+                <span className="phase-badge bg-purple-100 text-purple-700 ml-2" style={{ background: '#F3E8FF', color: '#7E22CE' }}>
+                  <FileText size={12} style={{ display: 'inline', marginRight: '4px' }} />
+                  {protocolVersions.find(v => v.id === p.protocolVersion)?.label || `Amendment ${p.protocolVersion}`}
+                </span>
+              )}
               &nbsp;·&nbsp; Study Day <span style={{ fontFamily: 'var(--fm)' }}>{p.studyDay || 0}</span>
               &nbsp;·&nbsp; {p.loc.includes('CLINIC') ? '🏥 Clinic' : '🏠 Home'}
-              &nbsp;·&nbsp; <span style={{ fontFamily: 'var(--fm)' }}>{fmtISO(TODAY)}</span>
+              &nbsp;·&nbsp; <span style={{ fontFamily: 'var(--fm)' }}>{fmtISO(getToday())}</span>
             </div>
             <div style={{ marginTop: '12px', display: 'flex', gap: '12px', alignItems: 'center', fontSize: '10px', color: 'var(--t3)', background: 'rgba(0,0,0,0.03)', padding: '6px 12px', borderRadius: '20px', width: 'fit-content' }}>
               <span style={{ fontWeight: 600, letterSpacing: '0.05em' }}>DEPENDENCY FLOW:</span>
@@ -1374,53 +1669,24 @@ export default function App() {
           </div>
         </div>
         <div className="today-context-bar" style={{ background: `linear-gradient(90deg, ${phaseColor} 0%, transparent 100%)` }}></div>
-        <div className="pv-tabs" style={{ display: 'flex', gap: '2px', padding: '0 24px', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
-          <button 
-            className={`pv-tab ${activeTab === 'checklist' ? 'active' : ''}`} 
-            onClick={() => setActiveTab('checklist')}
-            style={{ padding: '12px 20px', fontSize: '13px', fontWeight: 600, borderBottom: activeTab === 'checklist' ? '2px solid var(--blue)' : '2px solid transparent', color: activeTab === 'checklist' ? 'var(--blue)' : 'var(--t3)', transition: 'all 0.2s' }}
-          >
-            <ClipboardList size={14} style={{display:'inline', marginRight:'8px', verticalAlign:'text-bottom'}}/>
-            Today&apos;s Checklist
-          </button>
-          <button 
-            className={`pv-tab ${activeTab === 'documents' ? 'active' : ''}`} 
-            onClick={() => setActiveTab('documents')}
-            style={{ padding: '12px 20px', fontSize: '13px', fontWeight: 600, borderBottom: activeTab === 'documents' ? '2px solid var(--blue)' : '2px solid transparent', color: activeTab === 'documents' ? 'var(--blue)' : 'var(--t3)', transition: 'all 0.2s' }}
-          >
-            <FileText size={14} style={{display:'inline', marginRight:'8px', verticalAlign:'text-bottom'}}/>
-            Documentation
-            {p.documents.length === 0 && <span style={{ marginLeft: '8px', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--red)', display: 'inline-block' }}></span>}
-          </button>
-        </div>
         <div className="pv-grid">
           <div>
-            {p.dtqPos && activeTab === 'checklist' && (
+            {p.dtqPos && (
               <button className="dtq-btn" onClick={() => { setCdStart(Date.now() - 3 * 3600000); setWzOpen(true); }}>
                 <AlertTriangle size={18} /><span>Open RV Protocol Wizard — Countdown Active</span>
               </button>
             )}
-            {activeTab === 'checklist' ? (
-              <div className="card" ref={taskListRef} style={{ position: 'relative' }}>
-                <DependencyLines activeTrace={tracedTask || hoveredTask} p={p} taskListRef={taskListRef} />
-                <div className="card-hdr">
-                  <div><div className="card-title">Today&apos;s Assessment Checklist</div><div className="card-sub">{displayPhaseLabel} · {p.loc} · {fmtISO(TODAY)}</div></div>
-                  <div className={`progress-pill ${pct === 100 ? 'done' : ''}`}>{done}/{total}</div>
-                </div>
-                {renderGroup('Questionnaires / ePRO', p.tasks.q)}
-                {renderGroup('Procedures', p.tasks.pr)}
-                {renderGroup('Laboratory', p.tasks.l)}
-                {renderGroup('Administrative', p.tasks.ad)}
+            <div className="card" ref={taskListRef} style={{ position: 'relative' }}>
+              <DependencyLines activeTrace={tracedTask || hoveredTask} p={p} taskListRef={taskListRef} />
+              <div className="card-hdr">
+                <div><div className="card-title">Today&apos;s Assessment Checklist</div><div className="card-sub">{displayPhaseLabel} · {p.loc} · {fmtISO(getToday())}</div></div>
+                <div className={`progress-pill ${pct === 100 ? 'done' : ''}`}>{done}/{total}</div>
               </div>
-            ) : (
-              <PatientDocuments 
-                patient={p} 
-                onUpdate={(docs) => {
-                  setPatients(prev => prev.map(pt => pt.id === p.id ? { ...pt, documents: docs } : pt));
-                }} 
-                onDLPViolation={handleDLPViolation}
-              />
-            )}
+              {renderGroup('Questionnaires / ePRO', p.tasks.q)}
+              {renderGroup('Procedures', p.tasks.pr)}
+              {renderGroup('Laboratory', p.tasks.l)}
+              {renderGroup('Administrative', p.tasks.ad)}
+            </div>
           </div>
           <div className="rpanel">
             {p.ers && p.ers.length > 0 && (
@@ -1430,9 +1696,27 @@ export default function App() {
                   <Sparkline scores={p.ers} psb={p.psb} />
                   <div className="ers-stat-row">
                     <div className="ers-stat"><div className="ers-val" style={{ color: 'var(--amber)' }}>{p.psb ?? '—'}</div><div className="ers-lbl">PSB Score</div></div>
-                    <div className="ers-stat"><div className="ers-val" style={{ color: p.psb && p.ers[p.ers.length - 1] > p.psb ? 'var(--red)' : 'var(--green)' }}>{p.ers[p.ers.length - 1]}</div><div className="ers-lbl">Today</div></div>
+                    <div className="ers-stat">
+                      <div className="ers-val" style={{ 
+                        color: p.psb && p.ers[p.ers.length - 1] > p.psb ? 'var(--red)' : 'var(--green)',
+                        fontWeight: p.psb && (p.ers[p.ers.length - 1] < 0 || p.ers[p.ers.length - 1] > 10) ? 800 : 700,
+                        textDecoration: p.psb && (p.ers[p.ers.length - 1] < 0 || p.ers[p.ers.length - 1] > 10) ? 'underline wavy var(--red) 2px' : 'none',
+                        background: p.psb && (p.ers[p.ers.length - 1] < 0 || p.ers[p.ers.length - 1] > 10) ? 'var(--red-bg)' : 'transparent',
+                        padding: p.psb && (p.ers[p.ers.length - 1] < 0 || p.ers[p.ers.length - 1] > 10) ? '2px 6px' : '0',
+                        borderRadius: '4px'
+                      }}>
+                        {p.ers[p.ers.length - 1]}
+                      </div>
+                      <div className="ers-lbl">Today</div>
+                    </div>
                     <div className="ers-stat"><div className="ers-val" style={{ color: 'var(--blue)' }}>{p.psbRecords}</div><div className="ers-lbl">Records</div></div>
                   </div>
+                  {p.psb != null && p.ers.length > 0 && (p.ers[p.ers.length - 1] < 0 || p.ers[p.ers.length - 1] > 10) && (
+                    <div style={{ marginTop: '9px', padding: '7px', background: 'var(--red-bg)', borderRadius: '4px', fontSize: '11px', color: 'var(--red)' }}>
+                      <AlertTriangle size={12} style={{display:'inline', verticalAlign:'text-bottom', marginRight: '4px'}}/>
+                      Warning: E-RS score is outside the expected range of 0 to 10 based on the PSB value.
+                    </div>
+                  )}
                   {p.psbRecords < 3 && <div style={{ marginTop: '9px', padding: '7px', background: 'var(--red-bg)', borderRadius: '4px', fontSize: '11px', color: 'var(--red)' }}><AlertTriangle size={12} style={{display:'inline', verticalAlign:'text-bottom'}}/> &lt; 3 records — PSB not yet valid</div>}
                 </div>
               </div>
@@ -1448,16 +1732,16 @@ export default function App() {
                 </div>
               </div>
             )}
-            {p.phaseCode === 'scr' && (
+            {(p.phaseCode === 'scr' || p.phaseCode === 'rescr') && (
               <div className="scard">
-                <div className="scard-hdr"><CheckCircle2 size={14} /> Screening Actions</div>
+                <div className="scard-hdr"><CheckCircle2 size={14} /> {p.phaseCode === 'rescr' ? 'Rescreening Actions' : 'Screening Actions'}</div>
                 <div className="scard-body" style={{ padding: '10px 14px' }}>
                   <button 
                     className="btn btn-primary" 
                     style={{ width: '100%', justifyContent: 'center' }}
                     onClick={() => setScreeningOutcomeOpen(true)}
                   >
-                    Record Screening Outcome
+                    {p.phaseCode === 'rescr' ? 'Record Rescreening Outcome' : 'Record Screening Outcome'}
                   </button>
                 </div>
               </div>
@@ -1467,7 +1751,7 @@ export default function App() {
               <div className="scard-body" style={{ padding: '10px 14px' }}>
                 {p.alert === 'DTQ_POSITIVE' && <div className="al-item"><div className="al-pip" style={{ background: 'var(--red)' }}></div><div><div className="al-body">RV Protocol Active — attend clinic ASAP</div><div className="al-sub">48 h + 6 h window from symptom onset</div></div></div>}
                 {p.alert === 'MONTHLY_CALL' && <div className="al-item"><div className="al-pip" style={{ background: 'var(--amber)' }}></div><div><div className="al-body">Monthly call due (±5 days)</div><div className="al-sub">{p.monthlyCallDue ? fmtHuman(p.monthlyCallDue) : ''}</div></div></div>}
-                {p.alert === 'RESCREENING' && <div className="al-item"><div className="al-pip" style={{ background: 'var(--amber)' }}></div><div><div className="al-body">Rescreening in {diffDays(TODAY, p.nextVisit)} days</div><div className="al-sub">{fmtHuman(p.nextVisit)}</div></div></div>}
+                {p.alert === 'RESCREENING' && <div className="al-item"><div className="al-pip" style={{ background: 'var(--amber)' }}></div><div><div className="al-body">Rescreening in {diffDays(getToday(), p.nextVisit)} days</div><div className="al-sub">{fmtHuman(p.nextVisit)}</div></div></div>}
                 <div className="al-item"><div className="al-pip" style={{ background: 'var(--blue)' }}></div><div><div className="al-body">{p.nextVisitLabel}</div><div className="al-sub">{fmtHuman(p.nextVisit)}</div></div></div>
               </div>
             </div>
@@ -1496,6 +1780,23 @@ export default function App() {
               </div>
             </div>
             {p.labNote && <div className="scard"><div className="scard-hdr" style={{ color: 'var(--blue)' }}><Flag size={14} /> Protocol Note</div><div className="scard-body"><div className="scard-note"><DLPWrapper onViolation={handleDLPViolation}>{p.labNote}</DLPWrapper></div></div></div>}
+
+            {/* Navigator Daily Log */}
+            <NavigatorLog
+              patient={p}
+              onNewReminder={(entry) => {
+                setNotifications(prev => [{
+                  id: `rem_${entry.id}`,
+                  type: 'info' as const,
+                  title: `Reminder · ${p.id}`,
+                  message: entry.reminderText || entry.text.substring(0, 120),
+                  timestamp: new Date(),
+                  read: false,
+                  patientId: p.id,
+                }, ...prev]);
+                showToast('Reminder saved and added to notifications', 'ok');
+              }}
+            />
           </div>
         </div>
       </div>
@@ -1565,6 +1866,26 @@ export default function App() {
                     <option value="HOME→CLINIC">HOME→CLINIC</option>
                   </select>
                 </div>
+                {protocolVersions && protocolVersions.length > 0 && (
+                  <div style={{ marginBottom: '24px' }}>
+                    <label className="modal-label"><FileText size={12} /> Protocol Amendment Version</label>
+                    <select 
+                      className="modal-input"
+                      value={editPatientData.protocolVersion || ''} 
+                      onChange={e => setEditPatientData({ ...editPatientData, protocolVersion: e.target.value })}
+                    >
+                      <option value="">(Not Set)</option>
+                      {protocolVersions.map(pv => (
+                        <option key={pv.id} value={pv.id}>
+                          {pv.id} - {pv.label} {pv.status === 'active' ? '(Current)' : '(Legacy)'}
+                        </option>
+                      ))}
+                    </select>
+                    <div style={{ fontSize: '12px', color: '#64748B', marginTop: '6px' }}>
+                      If you change the amendment version, the patient&apos;s schedule and rules will update going forward.
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="modal-footer">
                 <button type="button" className="ibtn" onClick={() => { setEditPatientOpen(false); setModalErr(""); }}>Cancel</button>
@@ -1850,6 +2171,7 @@ export default function App() {
               <input 
                 id="edit-task-date"
                 type="date"
+                max={new Date().toISOString().split('T')[0]}
                 className="modal-input" 
                 value={editTask.task.dueDate ? fmtISO(new Date(editTask.task.dueDate)) : ''} 
                 onChange={e => {
@@ -1931,6 +2253,26 @@ export default function App() {
                     <option value="HOME→CLINIC">HOME→CLINIC</option>
                   </select>
                 </div>
+                {protocolVersions && protocolVersions.length > 0 && (
+                  <div style={{ marginBottom: '24px' }}>
+                    <label className="modal-label"><FileText size={12} /> Protocol Amendment Version</label>
+                    <select 
+                      className="modal-input"
+                      value={editPatientData.protocolVersion || ''} 
+                      onChange={e => setEditPatientData({ ...editPatientData, protocolVersion: e.target.value })}
+                    >
+                      <option value="">(Not Set)</option>
+                      {protocolVersions.map(pv => (
+                        <option key={pv.id} value={pv.id}>
+                          {pv.id} - {pv.label} {pv.status === 'active' ? '(Current)' : '(Legacy)'}
+                        </option>
+                      ))}
+                    </select>
+                    <div style={{ fontSize: '12px', color: '#64748B', marginTop: '6px' }}>
+                      If you change the amendment version, the patient&apos;s schedule and rules will update going forward.
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="modal-footer">
                 <button type="button" className="ibtn" onClick={() => { setEditPatientOpen(false); setModalErr(""); }}>Cancel</button>
@@ -1963,7 +2305,7 @@ export default function App() {
                   </button>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
                     <input type="checkbox" checked={emailEnabled} onChange={e => setEmailEnabled(e.target.checked)} />
-                    <Mail size={12} /> Email Alerts
+                    <Mail size={12} aria-hidden="true" /> Email Alerts
                   </label>
                 </div>
               </div>
@@ -2020,6 +2362,8 @@ export default function App() {
         <HelpModal 
           onClose={() => { setHelpOpen(false); setShowWelcome(false); }} 
           initialTab={showWelcome ? 'guide' : 'guide'} 
+          onDLPViolation={handleDLPViolation}
+          role={role}
         />
       )}
 

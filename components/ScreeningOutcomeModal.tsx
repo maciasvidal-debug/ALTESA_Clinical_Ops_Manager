@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { X, CheckCircle, XCircle, Calendar as CalendarIcon, AlertTriangle } from 'lucide-react';
-import { Patient, fmtISO, addDays, diffDays, TODAY } from '@/lib/data';
+import { Patient, fmtISO, addDays, diffDays, getToday } from '@/lib/data';
 
 interface ScreeningOutcomeModalProps {
   patient: Patient;
@@ -13,7 +13,7 @@ interface ScreeningOutcomeModalProps {
 
 export const ScreeningOutcomeModal = ({ patient, isOpen, onClose, onOutcome }: ScreeningOutcomeModalProps) => {
   const [outcome, setOutcome] = useState<'success' | 'failure' | null>(null);
-  const [icfDateStr, setIcfDateStr] = useState(fmtISO(patient.screeningDate || TODAY));
+  const [icfDateStr, setIcfDateStr] = useState(fmtISO(patient.screeningDate || getToday()));
   const [psbStartDateStr, setPsbStartDateStr] = useState(fmtISO(addDays(new Date(icfDateStr + 'T00:00:00'), 1)));
   const [reason, setReason] = useState('');
   const [err, setErr] = useState('');
@@ -74,7 +74,7 @@ export const ScreeningOutcomeModal = ({ patient, isOpen, onClose, onOutcome }: S
                   setPsbStartDateStr(fmtISO(addDays(new Date(e.target.value + 'T00:00:00'), 1)));
                 }}
                 required
-                max={fmtISO(TODAY)}
+                max={fmtISO(getToday())}
               />
             </div>
 
