@@ -52,6 +52,7 @@ import {
 } from "@/lib/data";
 import { DLPWrapper } from "@/components/DLPWrapper";
 import { PinConfirmModal } from "@/components/PinConfirmModal";
+import { WorkloadDashboard } from "@/components/WorkloadDashboard";
 import { verifyAndDecrypt, encryptAndSign, generateCRCKeys } from "@/lib/crypto";
 import {
   LineChart,
@@ -98,7 +99,7 @@ export function ManagerDashboard({
   onImportPatients,
 }: ManagerDashboardProps) {
   const [activeTab, setActiveTab] = useState<
-    "tracker" | "risk" | "analytics" | "queries"
+    "tracker" | "risk" | "analytics" | "queries" | "workload"
   >("tracker");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<"protocol" | "keys" | "audit">(
@@ -987,6 +988,31 @@ export function ManagerDashboard({
           >
             <MessageSquare size={18} /> Queries
           </button>
+          <button
+            className={`sidebar-tab ${activeTab === "workload" ? "active" : ""}`}
+            style={{
+              padding: "10px 16px",
+              borderRadius: "8px",
+              fontSize: "14px",
+              fontWeight: 500,
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              width: "100%",
+              textAlign: "left",
+              cursor: "pointer",
+              transition: "all 0.2s",
+              color: activeTab === "workload" ? "#fff" : "#94A3B8",
+              background: activeTab === "workload" ? "var(--t1)" : "transparent",
+              border: "none",
+            }}
+            onClick={() => {
+              setActiveTab("workload");
+              setIsSettingsOpen(false);
+            }}
+          >
+            <Clock size={18} /> Workload
+          </button>
         </nav>
         <div
           className="sidebar-bottom"
@@ -1144,6 +1170,7 @@ export function ManagerDashboard({
             {activeTab === "risk" && "Risk Intelligence"}
             {activeTab === "analytics" && "Global Analytics"}
             {activeTab === "queries" && "Queries & Flags"}
+            {activeTab === "workload" && "Workload"}
           </h1>
 
           <button
@@ -3767,6 +3794,12 @@ export function ManagerDashboard({
                     )}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {activeTab === "workload" && (
+              <div style={{ padding: "24px" }}>
+                <WorkloadDashboard />
               </div>
             )}
           </div>

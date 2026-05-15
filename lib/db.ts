@@ -1,6 +1,7 @@
 import localforage from 'localforage';
 type LocalForage = typeof localforage;
 import { Patient, ProtocolAmendment } from './data';
+import type { TelemetryRecord } from './telemetry';
 
 // Initialize instances for different data domains
 export const patientsStore = localforage.createInstance({
@@ -31,6 +32,11 @@ export const keysStore = localforage.createInstance({
 export const logsStore = localforage.createInstance({
   name: 'ALTESA_DB',
   storeName: 'navigator_logs'
+});
+
+export const telemetryStore = localforage.createInstance({
+  name: 'ALTESA_DB',
+  storeName: 'telemetry'
 });
 
 /** Injectable store overrides — used exclusively in tests for fault injection. */
@@ -147,19 +153,56 @@ export async function wipeAllData(
     patientsStore?: LocalForage; protocolStore?: LocalForage;
     configStore?: LocalForage;  auditStore?: LocalForage;
     keysStore?: LocalForage;    logsStore?: LocalForage;
+    telemetryStore?: LocalForage;
   } = {}
 ): Promise<void> {
   if (confirm !== 'WIPE_CONFIRMED') {
     throw new Error('wipeAllData requires explicit confirmation string.');
   }
   await Promise.all([
-    (_stores.patientsStore ?? patientsStore).clear(),
-    (_stores.protocolStore ?? protocolStore).clear(),
-    (_stores.configStore  ?? configStore).clear(),
-    (_stores.auditStore   ?? auditStore).clear(),
-    (_stores.keysStore    ?? keysStore).clear(),
-    (_stores.logsStore    ?? logsStore).clear(),
+    (_stores.patientsStore  ?? patientsStore).clear(),
+    (_stores.protocolStore  ?? protocolStore).clear(),
+    (_stores.configStore    ?? configStore).clear(),
+    (_stores.auditStore     ?? auditStore).clear(),
+    (_stores.keysStore      ?? keysStore).clear(),
+    (_stores.logsStore      ?? logsStore).clear(),
+    (_stores.telemetryStore ?? telemetryStore).clear(),
   ]);
+}
+
+// ── Telemetry DB Operations ───────────────────────────────────────────────────
+
+/**
+ * Persists a single telemetry record keyed by its UUID-based id.
+ * Idempotent by construction: re-writing the same id overwrites with identical data.
+ * The caller (dispatch() in telemetry.ts) never awaits this in the observational
+ * path, keeping writes strictly non-blocking for clinical UI flows.
+ */
+export async function appendTelemetryEvent(
+  event: TelemetryRecord,
+  _store: LocalForage = telemetryStore,
+): Promise<void> {
+  await _store.setItem(event.id, event);
+}
+
+/**
+ * Returns all telemetry records whose ISO timestamp starts with the given date
+ * prefix (YYYY-MM-DD). This is an O(n) iterate over the store; for the expected
+ * daily volume of a single-user clinical session this is well within budget.
+ *
+ * Idempotent: multiple calls with the same date always return the same set.
+ */
+export async function getTelemetryByDate(
+  isoDate: string,
+  _store: LocalForage = telemetryStore,
+): Promise<TelemetryRecord[]> {
+  const results: TelemetryRecord[] = [];
+  await _store.iterate((value: TelemetryRecord) => {
+    if (value?.timestamp?.startsWith(isoDate)) {
+      results.push(value);
+    }
+  });
+  return results;
 }
 
 /**

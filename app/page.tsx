@@ -36,8 +36,10 @@ import { Wizard } from '@/components/Wizard';
 import { RescreeningWizard } from '@/components/RescreeningWizard';
 import { DLPWrapper } from '@/components/DLPWrapper';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { WorkloadLogger } from '@/components/WorkloadLogger';
 import { checkTaskCompletion } from '@/lib/task-utils';
 import { classifyFirebaseError, shouldClearOnRevocation } from '@/lib/auth-utils';
+import { initTelemetrySession, endTelemetrySession, trackScreenView, trackEvent } from '@/lib/telemetry';
 
 const LungIcon = ({ size = 16, color = "currentColor", strokeWidth = 2, ...props }: any) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -180,6 +182,7 @@ export default function App() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
+  const [workloadLogOpen, setWorkloadLogOpen] = useState(false);
 
   // Manager State
   const [reviewedTasks, setReviewedTasks] = useState<Set<string>>(new Set());
@@ -247,6 +250,14 @@ export default function App() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Passive screen-time telemetry — fires on every screen transition.
+  // Non-blocking: trackScreenView dispatches fire-and-forget writes.
+  useEffect(() => {
+    if (screen !== 'auth') {
+      trackScreenView(screen as Parameters<typeof trackScreenView>[0]);
+    }
+  }, [screen]);
+
   const toastIdRef = useRef(0);
 
   const getRescreeningStatus = (p: Patient) => {
@@ -526,6 +537,7 @@ export default function App() {
     // In production, role is determined by the specific key used to decrypt the vault
     // For this prototype, we'll use a role selector or specific PIN ranges if needed,
     // but we remove the hardcoded "9999" bypass.
+    initTelemetrySession('local_user');
     setRole('coordinator');
     setScreen('dashboard');
     
@@ -566,6 +578,7 @@ export default function App() {
         // Subsequent access: verify against stored PBKDF2 hash
         const inputHash = await derivePINHash(pass, stored.salt);
         if (inputHash === stored.hash) {
+          initTelemetrySession('manager_user');
           setRole('manager');
           setScreen('manager_dashboard');
           showToast('Manager Vault Decrypted', 'ok');
@@ -983,7 +996,7 @@ export default function App() {
           queries={queries}
           protocolVersions={protocolVersions}
           setProtocolVersions={setProtocolVersions}
-          onLock={() => { setScreen('auth'); setPassphrase(''); setRole('coordinator'); setAuthMode('crc'); }} 
+          onLock={() => { endTelemetrySession(); setScreen('auth'); setPassphrase(''); setRole('coordinator'); setAuthMode('crc'); }}
           onOpenHelp={() => setHelpOpen(true)}
           onDLPViolation={handleDLPViolation} 
           isChecked={isChecked}
@@ -1212,16 +1225,34 @@ export default function App() {
           </div>
         )}
         {cmdOpen && <CmdPalette q={cmdQ} setQ={setCmdQ} onClose={() => setCmdOpen(false)} onSelect={(id: string) => { if (id === 'dashboard') setScreen('dashboard'); else openPatient(id); }} patients={patients} recentIds={recentIds} onDLPViolation={handleDLPViolation} />}
-        
+
         {(helpOpen || showWelcome) && (
-          <HelpModal 
-            onClose={() => { setHelpOpen(false); setShowWelcome(false); }} 
-            initialTab={showWelcome ? 'guide' : 'guide'} 
+          <HelpModal
+            onClose={() => { setHelpOpen(false); setShowWelcome(false); }}
+            initialTab={showWelcome ? 'guide' : 'guide'}
             onDLPViolation={handleDLPViolation}
             role={role}
           />
         )}
-        
+
+        {/* Workload Logger FAB */}
+        <button
+          onClick={() => { setWorkloadLogOpen(true); trackEvent('modal_opened', { modal: 'workload_logger' }); }}
+          aria-label="Log off-platform time"
+          title="Log off-platform time"
+          className="fixed bottom-5 right-5 z-40 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-medium px-3.5 py-2.5 rounded-full shadow-lg transition-all hover:shadow-xl"
+        >
+          <Clock size={14} />
+          Log Time
+        </button>
+
+        {workloadLogOpen && (
+          <WorkloadLogger
+            userId="local_user"
+            onClose={() => { setWorkloadLogOpen(false); trackEvent('modal_closed', { modal: 'workload_logger' }); }}
+          />
+        )}
+
         <Toasts toasts={toasts} />
       </>
     );
@@ -2399,6 +2430,24 @@ export default function App() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Workload Logger FAB — available from patient screen too */}
+      <button
+        onClick={() => { setWorkloadLogOpen(true); trackEvent('modal_opened', { modal: 'workload_logger', screen: 'patient' }); }}
+        aria-label="Log off-platform time"
+        title="Log off-platform time"
+        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-medium px-3.5 py-2.5 rounded-full shadow-lg transition-all hover:shadow-xl"
+      >
+        <Clock size={14} />
+        Log Time
+      </button>
+
+      {workloadLogOpen && (
+        <WorkloadLogger
+          userId="local_user"
+          onClose={() => { setWorkloadLogOpen(false); trackEvent('modal_closed', { modal: 'workload_logger' }); }}
+        />
       )}
 
       <Toasts toasts={toasts} />
