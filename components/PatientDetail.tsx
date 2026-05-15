@@ -1,20 +1,21 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { 
-  ArrowLeft, Edit3, Trash2, CheckCircle2, Circle, Clock, 
-  AlertTriangle, Info, ChevronRight, FileText, LayoutGrid, 
+import {
+  ArrowLeft, Edit3, Trash2, CheckCircle2, Circle, Clock,
+  AlertTriangle, Info, ChevronRight, FileText, LayoutGrid,
   ListTodo, Calendar, Phone, Activity, Search, Check, Heart, Lock, Unlock,
-  Stethoscope, Syringe, Pill, Hospital, Beaker, ClipboardList, GraduationCap, 
-  Bug, Droplet, User, BadgeCheck, Bell, Wind
+  Stethoscope, Syringe, Pill, Hospital, Beaker, ClipboardList, GraduationCap,
+  Bug, Droplet, User, BadgeCheck, Bell, Wind, CalendarDays
 } from 'lucide-react';
-import { 
+import {
   type Patient, type Task, type Document, type LogEntry,
-  fmtHuman, fmtISO, getTodayPct, countTasks 
+  fmtHuman, fmtISO, getTodayPct, countTasks
 } from '@/lib/data';
 import { DependencyLines } from './DependencyLines';
 import { DLPWrapper } from '@/components/DLPWrapper';
 import { NavigatorLog } from '@/components/NavigatorLog';
+import { TimelineNavigator } from '@/components/TimelineNavigator';
 
 const LungIcon = ({ size = 16, color = "currentColor", strokeWidth = 2, ...props }: any) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -77,6 +78,7 @@ export const PatientDetail = ({
   onNewReminder,
 }: PatientDetailProps) => {
   const [activeTrace, setActiveTrace] = useState<string | null>(null);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   const taskListRef = useRef<HTMLDivElement>(null);
 
   const [overrideModalCode, setOverrideModalCode] = useState<string | null>(null);
@@ -195,6 +197,14 @@ export const PatientDetail = ({
           </div>
         </div>
         <div className="hdr-right">
+          <button
+            className="ibtn"
+            onClick={() => setTimelineOpen(true)}
+            title="Open Protocol Timeline Navigator"
+            style={{ color: 'var(--blue)' }}
+          >
+            <CalendarDays size={14} /> Timeline
+          </button>
           <button className="ibtn" onClick={onEdit} title="Edit Patient"><Edit3 size={14} /> Edit</button>
           <button className="ibtn" onClick={onDelete} title="Delete Patient" style={{ color: 'var(--red)' }}><Trash2 size={14} /> Delete</button>
         </div>
@@ -449,6 +459,13 @@ export const PatientDetail = ({
             </div>
           </div>
         </div>
+      )}
+
+      {timelineOpen && (
+        <TimelineNavigator
+          patient={patient}
+          onClose={() => setTimelineOpen(false)}
+        />
       )}
     </div>
   );
