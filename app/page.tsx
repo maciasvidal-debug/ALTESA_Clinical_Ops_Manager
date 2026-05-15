@@ -12,7 +12,8 @@ import {
   HelpCircle, Phone, Activity, ChevronRight, ArrowUp, ArrowDown, Link,
   ChevronDown, Plus, FileEdit, ArrowLeft, Circle, FileText, BarChart2,
   CheckCircle2, CheckCircle, Calendar, Flag, Microscope, Home, Wind, Pill, MessageSquare,
-  Stethoscope, Droplet, Bug, TestTubes, FlaskConical, Beaker, GraduationCap, Heart, BadgeCheck
+  Stethoscope, Droplet, Bug, TestTubes, FlaskConical, Beaker, GraduationCap, Heart, BadgeCheck,
+  CalendarDays
 } from 'lucide-react';
 
 // Components
@@ -37,6 +38,7 @@ import { RescreeningWizard } from '@/components/RescreeningWizard';
 import { DLPWrapper } from '@/components/DLPWrapper';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { WorkloadLogger } from '@/components/WorkloadLogger';
+import { TimelineNavigator } from '@/components/TimelineNavigator';
 import { checkTaskCompletion } from '@/lib/task-utils';
 import { classifyFirebaseError, shouldClearOnRevocation } from '@/lib/auth-utils';
 import { initTelemetrySession, endTelemetrySession, trackScreenView, trackEvent } from '@/lib/telemetry';
@@ -160,6 +162,8 @@ export default function App() {
   
   const [chkd, setChkd] = useState<Record<string, Set<string>>>({});
   
+  const [timelineOpen, setTimelineOpen] = useState(false);
+
   const [wzOpen, setWzOpen] = useState(false);
   const [wzStep, setWzStep] = useState(0);
   const [wzChks, setWzChks] = useState<Record<number, Set<number>>>({});
@@ -1564,6 +1568,14 @@ export default function App() {
       <div className="hdr">
         <div className="hdr-left"><div className="wordmark">ALTE<em>SA</em></div><span className="hdr-context"><DLPWrapper onViolation={handleDLPViolation}>{p.id}</DLPWrapper> · {displayPhaseLabel}</span></div>
         <div className="hdr-right">
+          <button
+            className="ibtn"
+            onClick={() => setTimelineOpen(true)}
+            title="Open Protocol Timeline Navigator"
+            style={{ color: 'var(--blue)', fontWeight: 600 }}
+          >
+            <CalendarDays size={14} /> Timeline
+          </button>
           <button className="ibtn" onClick={() => setHelpOpen(true)} title="Help Centre"><HelpCircle size={14} /> Help</button>
           <button className="ibtn relative" onClick={() => setNotifOpen(true)} title="Notifications">
             <Bell size={14} />
@@ -2430,6 +2442,13 @@ export default function App() {
             </form>
           </div>
         </div>
+      )}
+
+      {timelineOpen && (
+        <TimelineNavigator
+          patient={p}
+          onClose={() => setTimelineOpen(false)}
+        />
       )}
 
       {/* Workload Logger FAB — available from patient screen too */}
