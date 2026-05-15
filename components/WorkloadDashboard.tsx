@@ -234,7 +234,7 @@ export function WorkloadDashboard() {
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(v: number) => fmtDuration(v)}
+                        formatter={(v) => fmtDuration(typeof v === 'number' ? v : 0)}
                         contentStyle={{ fontSize: 11 }}
                       />
                     </PieChart>
@@ -275,7 +275,7 @@ export function WorkloadDashboard() {
                     <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} unit="m" />
                     <Tooltip
-                      formatter={(v: number) => fmtDuration(v)}
+                      formatter={(v) => fmtDuration(typeof v === 'number' ? v : 0)}
                       contentStyle={{ fontSize: 11 }}
                     />
                     <Bar dataKey="In-App" stackId="a" fill="#3b82f6" radius={[0, 0, 0, 0]} />
