@@ -1576,6 +1576,13 @@ export default function App() {
           >
             <CalendarDays size={14} /> Timeline
           </button>
+          <button
+            className="ibtn"
+            onClick={() => { setWorkloadLogOpen(true); trackEvent('modal_opened', { modal: 'workload_logger', screen: 'patient' }); }}
+            title="Log off-platform time"
+          >
+            <Clock size={14} /> Log Time
+          </button>
           <button className="ibtn" onClick={() => setHelpOpen(true)} title="Help Centre"><HelpCircle size={14} /> Help</button>
           <button className="ibtn relative" onClick={() => setNotifOpen(true)} title="Notifications">
             <Bell size={14} />
@@ -2450,17 +2457,6 @@ export default function App() {
           onClose={() => setTimelineOpen(false)}
         />
       )}
-
-      {/* Workload Logger FAB — available from patient screen too */}
-      <button
-        onClick={() => { setWorkloadLogOpen(true); trackEvent('modal_opened', { modal: 'workload_logger', screen: 'patient' }); }}
-        aria-label="Log off-platform time"
-        title="Log off-platform time"
-        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-medium px-3.5 py-2.5 rounded-full shadow-lg transition-all hover:shadow-xl"
-      >
-        <Clock size={14} />
-        Log Time
-      </button>
 
       {workloadLogOpen && (
         <WorkloadLogger

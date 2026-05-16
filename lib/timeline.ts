@@ -560,16 +560,11 @@ export function getItemAt(def: VisitDef, code: string): SoAItem | undefined {
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
-function findTaskInPatient(patient: Patient, code: string): Task | undefined {
-  return ([] as Task[])
-    .concat(patient.tasks.q, patient.tasks.pr, patient.tasks.l, patient.tasks.ad)
-    .find(t => t.code === code);
-}
-
 function estimateVisitDate(
   patient: Patient,
   def: VisitDef,
-  psbVisitDefs: VisitDef[],
+  psbRef: Date | null,
+  psbVisitIndex: Map<string, number>,
 ): Date | null {
   const { screeningDate, psbStartDate, rvInfectionDate, randomizationDate } = patient;
   switch (def.key) {
@@ -588,10 +583,9 @@ function estimateVisitDate(
     default: break;
   }
   if (def.key.startsWith('PSB_M')) {
-    const idx = psbVisitDefs.findIndex(v => v.key === def.key);
+    const idx = psbVisitIndex.get(def.key) ?? -1;
     if (idx < 0) return null;
-    const ref = psbStartDate ?? screeningDate;
-    return ref ? addDays(ref, (idx + 1) * 28) : null;
+    return psbRef ? addDays(psbRef, (idx + 1) * 28) : null;
   }
   return null;
 }
@@ -599,10 +593,11 @@ function estimateVisitDate(
 function determineOccurred(
   patient: Patient,
   def: VisitDef,
-  psbVisitDefs: VisitDef[],
+  today: Date,
+  psbRef: Date | null,
+  psbVisitIndex: Map<string, number>,
 ): boolean {
-  const today = getToday();
-  const { screeningDate, psbStartDate, randomizationDate, rvInfectionDate, resolution } = patient;
+  const { screeningDate, randomizationDate, rvInfectionDate, resolution } = patient;
   switch (def.key) {
     case 'SCR':      return !!screeningDate && screeningDate <= today;
     case 'RESCR':    return patient.phaseCode === 'rescr';
@@ -618,11 +613,9 @@ function determineOccurred(
     default: break;
   }
   if (def.key.startsWith('PSB_M')) {
-    const idx = psbVisitDefs.findIndex(v => v.key === def.key);
-    if (idx < 0) return false;
-    const ref = psbStartDate ?? screeningDate;
-    if (!ref) return false;
-    return addDays(ref, (idx + 1) * 28) <= today;
+    const idx = psbVisitIndex.get(def.key) ?? -1;
+    if (idx < 0 || !psbRef) return false;
+    return addDays(psbRef, (idx + 1) * 28) <= today;
   }
   return false;
 }
@@ -634,15 +627,16 @@ export function getCurrentVisitKey(patient: Patient): string {
   const { phaseCode, dtqPos, randomizationDate, rvInfectionDate, psbStartDate, screeningDate } = patient;
   if (phaseCode === 'scr')   return 'SCR';
   if (phaseCode === 'rescr') return 'RESCR';
+  const today = getToday();
   if (phaseCode === 'psb') {
     if (dtqPos && !randomizationDate) return 'RV_ONSET';
     const ref = psbStartDate ?? screeningDate;
-    const days = ref ? diffDays(ref, getToday()) : 0;
+    const days = ref ? diffDays(ref, today) : 0;
     return `PSB_M${Math.max(1, Math.ceil(days / 28))}`;
   }
   const ref = randomizationDate ?? rvInfectionDate;
   if (!ref) return 'RV_D1';
-  const d = diffDays(ref, getToday());
+  const d = diffDays(ref, today);
   if (d <= 1)  return 'RV_D1';
   if (d <= 5)  return 'RV_D3';
   if (d <= 10) return 'RV_D7';
@@ -668,6 +662,16 @@ export function buildPatientTimeline(patient: Patient): VisitSnapshot[] {
   const psbMaxWeeks = Math.min(68, Math.max(currentPSBWeek + 8, 16));
   const psbVisitDefs = buildPSBVisitDefs(psbMaxWeeks);
 
+  // O(1) PSB visit index — avoids repeated O(n) findIndex inside the map loop
+  const psbVisitIndex = new Map<string, number>(psbVisitDefs.map((v, i) => [v.key, i]));
+
+  // O(1) task lookup — avoids re-concatenating all task arrays per assessment item
+  const taskIndex = new Map<string, Task>(
+    ([] as Task[])
+      .concat(patient.tasks.q, patient.tasks.pr, patient.tasks.l, patient.tasks.ad)
+      .map(t => [t.code, t]),
+  );
+
   const allDefs: VisitDef[] = [VISIT_SCR];
 
   if (['psb', 'rescr', 'rv', 'tx', 'fu'].includes(phaseCode)) {
@@ -683,8 +687,8 @@ export function buildPatientTimeline(patient: Patient): VisitSnapshot[] {
   }
 
   return allDefs.map(def => {
-    const estimatedDate = estimateVisitDate(patient, def, psbVisitDefs);
-    const occurred = determineOccurred(patient, def, psbVisitDefs);
+    const estimatedDate = estimateVisitDate(patient, def, psbRef, psbVisitIndex);
+    const occurred = determineOccurred(patient, def, today, psbRef, psbVisitIndex);
 
     let status: VisitStatus;
     if (def.key === currentKey) {
@@ -698,7 +702,7 @@ export function buildPatientTimeline(patient: Patient): VisitSnapshot[] {
     const assessments: AssessmentResult[] = def.items.map(item => {
       let completed: boolean | null = null;
       if (status === 'current') {
-        const task = findTaskInPatient(patient, item.code);
+        const task = taskIndex.get(item.code);
         completed = task != null ? task.done : null;
       }
       return {

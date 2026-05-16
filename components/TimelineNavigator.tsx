@@ -816,12 +816,13 @@ export function TimelineNavigator({ patient, onClose }: TimelineNavigatorProps) 
 
             {/* ── NOTES & LOG ──────────────────────────────────────────────── */}
             {activeTab === 'log' && (
-              <div>
+              <div style={{ padding: '12px 14px 24px' }}>
                 {snap.estimatedDate && (
                   <div style={{
-                    padding: '7px 14px', borderBottom: '1px solid var(--border)',
-                    background: 'var(--surface)', display: 'flex', alignItems: 'center', gap: '5px',
-                    fontSize: '11px', color: 'var(--t3)',
+                    padding: '6px 10px', border: '1px solid var(--border)',
+                    background: 'var(--surface)', borderRadius: '6px',
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    fontSize: '11px', color: 'var(--t3)', marginBottom: '10px',
                   }}>
                     <Clock size={11} />
                     Notes within visit window: {fmtDate(getVisitDateWindow(snap).from)} — {fmtDate(getVisitDateWindow(snap).to)}
@@ -829,7 +830,7 @@ export function TimelineNavigator({ patient, onClose }: TimelineNavigatorProps) 
                 )}
 
                 {visitLogs.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '36px 24px', color: 'var(--t3)', fontSize: '13px' }}>
+                  <div style={{ textAlign: 'center', padding: '28px 24px', color: 'var(--t3)', fontSize: '13px' }}>
                     <StickyNote size={26} color="var(--border)" style={{ display: 'block', margin: '0 auto 10px' }} />
                     No navigator notes for this visit period.
                     {logs.length > 0 && (
@@ -837,7 +838,9 @@ export function TimelineNavigator({ patient, onClose }: TimelineNavigatorProps) 
                     )}
                   </div>
                 ) : (
-                  visitLogs.map(entry => <LogRow key={entry.id} entry={entry} />)
+                  <div className="scard" style={{ overflow: 'hidden' }}>
+                    {visitLogs.map(entry => <LogRow key={entry.id} entry={entry} />)}
+                  </div>
                 )}
               </div>
             )}

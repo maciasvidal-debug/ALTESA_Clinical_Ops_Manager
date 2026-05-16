@@ -16,6 +16,7 @@ import { DependencyLines } from './DependencyLines';
 import { DLPWrapper } from '@/components/DLPWrapper';
 import { NavigatorLog } from '@/components/NavigatorLog';
 import { TimelineNavigator } from '@/components/TimelineNavigator';
+import { WorkloadLogger } from '@/components/WorkloadLogger';
 
 const LungIcon = ({ size = 16, color = "currentColor", strokeWidth = 2, ...props }: any) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -79,6 +80,7 @@ export const PatientDetail = ({
 }: PatientDetailProps) => {
   const [activeTrace, setActiveTrace] = useState<string | null>(null);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [workloadLogOpen, setWorkloadLogOpen] = useState(false);
   const taskListRef = useRef<HTMLDivElement>(null);
 
   const [overrideModalCode, setOverrideModalCode] = useState<string | null>(null);
@@ -204,6 +206,13 @@ export const PatientDetail = ({
             style={{ color: 'var(--blue)' }}
           >
             <CalendarDays size={14} /> Timeline
+          </button>
+          <button
+            className="ibtn"
+            onClick={() => setWorkloadLogOpen(true)}
+            title="Log off-platform time"
+          >
+            <Clock size={14} /> Log Time
           </button>
           <button className="ibtn" onClick={onEdit} title="Edit Patient"><Edit3 size={14} /> Edit</button>
           <button className="ibtn" onClick={onDelete} title="Delete Patient" style={{ color: 'var(--red)' }}><Trash2 size={14} /> Delete</button>
@@ -465,6 +474,13 @@ export const PatientDetail = ({
         <TimelineNavigator
           patient={patient}
           onClose={() => setTimelineOpen(false)}
+        />
+      )}
+
+      {workloadLogOpen && (
+        <WorkloadLogger
+          userId="local_user"
+          onClose={() => setWorkloadLogOpen(false)}
         />
       )}
     </div>
