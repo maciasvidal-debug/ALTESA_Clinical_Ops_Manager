@@ -542,12 +542,12 @@ export function buildPSBVisitDefs(maxWeeks: number): VisitDef[] {
   const c0Range = [1, c0End] as const;
 
   // W1 Days 1-3 block (SGRQ baseline on Day 1; always present)
+  // No window: the block is defined exactly by dayRange [1,3]. No ±tolerance in Table 2.
   visits.push({
     key: 'PSB_W1_BLOCK',
     label: 'PSB Week 1 — Days 1–3 (3-Day Block) · SGRQ Baseline',
     shortLabel: 'W1',
     phase: 'psb',
-    window: 1,
     dayRange: [1, 3] as const,
     visitGroup: 'PSB_C0',
     cycleRange: c0Range,
@@ -558,22 +558,22 @@ export function buildPSBVisitDefs(maxWeeks: number): VisitDef[] {
       'DTQ completed daily — any positive answer triggers RV Protocol immediately.',
       'E-RS/PGIS, WURSS-11, and PRN inhaler tracking begin via ePRO today.',
       'Assessments required on Days 1, 2, and 3 (each day of this block).',
-      'Next contact: Day 7 (±1 day) — end of Week 1.',
+      'Next contact: Day 7 — end of Week 1.',
     ],
   });
 
   if (maxWeeks >= 1) {
+    // No window: Day 7 is a fixed weekly contact. No ±tolerance stated in Table 2.
     visits.push({
       key: 'PSB_W1_D7',
       label: 'PSB Week 1 — Day 7',
       shortLabel: 'W1 D7',
       phase: 'psb',
-      window: 1,
       visitGroup: 'PSB_C0',
       cycleRange: c0Range,
       items: I_PSB_W1_D7_ITEMS,
       coordinationNotes: [
-        'Weekly PSB contact — Day 7 (±1 day).',
+        'Weekly PSB contact — Day 7.',
         'Confirm DTQ has been NO every day since Day 1.',
         'Review ePRO compliance: E-RS/PGIS, WURSS-11, DTQ daily entries.',
         'Next contact: Day 14 — Monthly Phone Call (±5 days).',
@@ -582,6 +582,7 @@ export function buildPSBVisitDefs(maxWeeks: number): VisitDef[] {
   }
 
   if (maxWeeks >= 2) {
+    // window: 5 — explicitly stated in Table 2: "Monthly Phone Call (±5-day window)".
     visits.push({
       key: 'PSB_W2',
       label: 'PSB Week 2 — Day 14 (Monthly Call)',
@@ -592,7 +593,7 @@ export function buildPSBVisitDefs(maxWeeks: number): VisitDef[] {
       cycleRange: c0Range,
       items: buildPSBWeeklyItems(true),
       coordinationNotes: [
-        'Monthly Phone Call — contact within ±5 days of Day 14.',
+        'Monthly Phone Call — contact within ±5 days of Day 14 (per Table 2).',
         'Topics: comorbidities, COPD medications, new infections, hospitalisations (fn. m).',
         'Confirm DTQ has remained negative daily.',
         'Record exact contact date and time in eCRF.',
@@ -603,17 +604,17 @@ export function buildPSBVisitDefs(maxWeeks: number): VisitDef[] {
   }
 
   if (maxWeeks >= 3) {
+    // No window: Day 21 is a fixed weekly contact. No ±tolerance stated in Table 2.
     visits.push({
       key: 'PSB_W3',
       label: 'PSB Week 3 — Day 21',
       shortLabel: 'W3',
       phase: 'psb',
-      window: 5,
       visitGroup: 'PSB_C0',
       cycleRange: c0Range,
       items: buildPSBWeeklyItems(false),
       coordinationNotes: [
-        'Weekly PSB contact — Day 21 (±5 days).',
+        'Weekly PSB contact — Day 21.',
         'Confirm DTQ has been negative all week.',
         'Review ePRO compliance.',
         'Next contact: Week 4 — Days 28–30 (3-Day Block).',
@@ -631,12 +632,13 @@ export function buildPSBVisitDefs(maxWeeks: number): VisitDef[] {
     const hasSGRQ = PSB_SGRQ_WEEKS.has(blockWeek);
     const blockHasMC = isMCWeek(blockWeek);
 
+    // No window: 3-day block is defined exactly by dayRange. No ±tolerance in Table 2.
+    // Monthly Call embedded in block has its own ±5-day window (noted in coordinationNotes).
     visits.push({
       key: `PSB_W${blockWeek}_BLOCK`,
       label: `PSB Week ${blockWeek} — Days ${dayStart}–${dayStart + 2} (3-Day Block)${hasSGRQ ? ' · SGRQ' : ''}${blockHasMC ? ' · Monthly Call' : ''}`,
       shortLabel: `W${blockWeek}`,
       phase: 'psb',
-      window: 3,
       dayRange: [dayStart, dayStart + 2] as const,
       visitGroup: cGroup,
       cycleRange: cRange,
@@ -668,20 +670,22 @@ export function buildPSBVisitDefs(maxWeeks: number): VisitDef[] {
         label: `PSB Week ${w} — Day ${weekDay}${wHasMC ? ' (Monthly Call)' : ''}`,
         shortLabel: `W${w}`,
         phase: 'psb',
-        window: 5,
+        // window: 5 only for Monthly Call visits (Table 2: "±5-day window").
+        // Non-MC weekly contacts are fixed-date — no tolerance stated in the SoA.
+        ...(wHasMC ? { window: 5 } : {}),
         visitGroup: cGroup,
         cycleRange: cRange,
         items: buildPSBWeeklyItems(wHasMC),
         coordinationNotes: wHasMC
           ? [
-              `Monthly Phone Call — contact within ±5 days of Day ${weekDay}.`,
+              `Monthly Phone Call — contact within ±5 days of Day ${weekDay} (per Table 2).`,
               'Topics: comorbidities, COPD meds, new infections, hospitalisations (fn. m).',
               'Confirm DTQ has remained negative.',
               'Record exact contact date and time in eCRF.',
               'Document any new or changed ConMeds.',
             ]
           : [
-              `Weekly PSB contact — Day ${weekDay} (±5 days).`,
+              `Weekly PSB contact — Day ${weekDay}.`,
               'Confirm DTQ has been negative since last contact.',
               'Review ePRO compliance: E-RS/PGIS, WURSS-11, DTQ, PRN entries.',
             ],
@@ -694,16 +698,29 @@ export function buildPSBVisitDefs(maxWeeks: number): VisitDef[] {
 
 // ─── Helper: visit date window ────────────────────────────────────────────────
 
-/** Returns the ±window date range for filtering logs/documents to a visit. */
+/**
+ * Returns the date range for filtering logs/documents to a visit.
+ *
+ * Priority:
+ *  1. dayRange blocks (e.g. Days 28-30): from = block start, to = block end.
+ *  2. Explicit window (±N days from the SoA, e.g. Monthly Call ±5): ±window.
+ *  3. Exact-date visits (no window, no dayRange): exact day only (from = to).
+ */
 export function getVisitDateWindow(
   snapshot: VisitSnapshot,
 ): { from: Date; to: Date } {
-  const center = snapshot.estimatedDate ?? getToday();
-  const halfWindow = snapshot.def.window ?? 7;
-  return {
-    from: addDays(center, -halfWindow),
-    to:   addDays(center,  halfWindow),
-  };
+  const anchor = snapshot.estimatedDate ?? getToday();
+  const { dayRange, window: win } = snapshot.def;
+
+  if (dayRange) {
+    // Block spans multiple days: from = first day, to = last day of block.
+    return { from: anchor, to: addDays(anchor, dayRange[1] - dayRange[0]) };
+  }
+  if (win != null) {
+    return { from: addDays(anchor, -win), to: addDays(anchor, win) };
+  }
+  // Exact-date visit: no SoA window defined.
+  return { from: anchor, to: anchor };
 }
 
 /** Filters patient documents to those uploaded within a visit's date window. */
