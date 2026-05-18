@@ -41,6 +41,12 @@ export type VisitDef = {
   items: SoAItem[];
   /** Coordination preparation notes shown in the Coordination tab. */
   coordinationNotes?: string[];
+  /** PSB cycle group key (e.g. 'PSB_C0', 'PSB_C1'). Progressive disclosure grouping. */
+  visitGroup?: string;
+  /** [startWeek, endWeek] of the PSB cycle this visit belongs to. */
+  cycleRange?: readonly [number, number];
+  /** [startDay, endDay] for 3-day block visits (e.g. [28, 30]). */
+  dayRange?: readonly [number, number];
 };
 
 export type VisitStatus = 'past' | 'current' | 'future';
@@ -200,32 +206,63 @@ const I_RESCR: SoAItem[] = [
     note: 'Reinforce ePRO, DTQ, home virology testing compliance.' },
 ];
 
-const I_PSB_MONTHLY: SoAItem[] = [
-  { code: 'DTQ',  label: 'Daily Trigger Questionnaire',              category: 'Q',
-    note: 'Confirm answer is NO (negative). Any positive answer requires immediate escalation to RV Protocol.' },
-  { code: 'ERS',  label: 'E-RS / PGIS',                             category: 'Q' },
-  { code: 'WURSS',label: 'WURSS-11',                                category: 'Q' },
-  { code: 'MC',   label: 'Monthly Phone/Telehealth Call',           category: 'AD',
-    note: 'Contact within ±5 day window. Topics: comorbidities, COPD meds, infections, hospitalisations (fn. m).' },
-  { code: 'PRN',  label: 'COPD PRN Inhaler Use',                    category: 'AD' },
-  { code: 'CMED', label: 'Concomitant Medications — any changes',   category: 'AD' },
-  { code: 'HOSP', label: 'COPD-related Hospitalisations',           category: 'AD' },
+// ─── PSB SoA item atoms (Table 2) ────────────────────────────────────────────
+// Core daily items required at EVERY PSB timepoint per SoA Table 2.
+const I_PSB_CORE: SoAItem[] = [
+  { code: 'DTQ',   label: 'Daily Trigger Questionnaire (DTQ)',    category: 'Q',
+    note: 'Confirm answer is NO (negative). Any positive answer → immediate RV Protocol escalation.' },
+  { code: 'ERS',   label: 'EXACT (E-RS) / PGIS',                 category: 'Q',
+    note: 'PGIS collected at each E-RS administration. Daily ePRO entry.' },
+  { code: 'WURSS', label: 'WURSS-11',                             category: 'Q',
+    note: 'Wisconsin Upper Respiratory Symptom Survey. Daily ePRO entry.' },
+  { code: 'PRN',   label: 'COPD PRN Inhaler Use (puffs/day)',     category: 'AD',
+    note: 'Number of puffs per day. Recorded alongside daily ePRO.' },
 ];
 
-const I_PSB_SGRQ: SoAItem[] = [
-  { code: 'SGRQ', label: "Saint George's Respiratory Questionnaire (SGRQ)", category: 'Q',
-    note: 'Must be completed by the patient at the clinic visit before leaving.' },
-  { code: 'DTQ',  label: 'Daily Trigger Questionnaire',              category: 'Q',
-    note: 'Confirm answer is NO (negative). Any positive answer requires immediate escalation.' },
-  { code: 'ERS',  label: 'E-RS / PGIS',                             category: 'Q' },
-  { code: 'WURSS',label: 'WURSS-11',                                category: 'Q' },
-  { code: 'VS',   label: 'Vital Signs',                             category: 'PR' },
-  { code: 'MC',   label: 'Monthly Call / Clinic Visit',             category: 'AD',
-    note: 'SGRQ clinic visit — patient attends in person. Contact 48h in advance to confirm.' },
-  { code: 'PRN',  label: 'COPD PRN Inhaler Use',                    category: 'AD' },
-  { code: 'CMED', label: 'Concomitant Medications — any changes',   category: 'AD' },
-  { code: 'HOSP', label: 'COPD-related Hospitalisations',           category: 'AD' },
-];
+// SGRQ item variants
+const I_PSB_SGRQ_BASELINE: SoAItem = {
+  code: 'SGRQ', label: "Saint George's Respiratory Questionnaire (SGRQ) — Baseline",
+  category: 'Q',
+  note: 'PSB baseline SGRQ — Day 1 only (fn. i). Patient completes at clinic before leaving.',
+};
+const I_PSB_SGRQ_PERIODIC: SoAItem = {
+  code: 'SGRQ', label: "Saint George's Respiratory Questionnaire (SGRQ)",
+  category: 'Q',
+  note: 'Administered on the first day of this 3-day block. Patient completes at clinic before leaving (fn. i).',
+};
+
+// Monthly Phone Call item (±5 days, Table 2)
+const I_PSB_MC_ITEM: SoAItem = {
+  code: 'MC', label: 'Monthly Phone Call from Site (±5 days)', category: 'AD',
+  note: 'Contact within ±5-day window. Topics: comorbidities, COPD meds, infections, hospitalisations (fn. m).',
+};
+
+// True if week w falls on a Monthly Call week within the 12-week repeat cycle.
+// Pattern from Table 2: positions 2, 5, 8, 12 within each 12-week cycle.
+function isMCWeek(w: number): boolean {
+  const pos = ((w - 1) % 12) + 1;
+  return pos === 2 || pos === 5 || pos === 8 || pos === 12;
+}
+
+// Items for W1 Days 1-3 block (SGRQ baseline, core items; W1 is not a MC week)
+const I_PSB_W1_BLOCK_ITEMS: SoAItem[] = [I_PSB_SGRQ_BASELINE, ...I_PSB_CORE];
+
+// Items for W1 Day 7 (core only, no SGRQ, not a MC week)
+const I_PSB_W1_D7_ITEMS: SoAItem[] = [...I_PSB_CORE];
+
+// Builder: items for regular weekly visits (with or without MC)
+function buildPSBWeeklyItems(hasMC: boolean): SoAItem[] {
+  return hasMC ? [...I_PSB_CORE, I_PSB_MC_ITEM] : [...I_PSB_CORE];
+}
+
+// Builder: items for 3-day block visits (Table 2 weeks 4, 8, 12, ...)
+function buildPSBBlockItems(hasSGRQ: boolean, hasMC: boolean): SoAItem[] {
+  const items: SoAItem[] = [];
+  if (hasSGRQ) items.push(I_PSB_SGRQ_PERIODIC);
+  items.push(...I_PSB_CORE);
+  if (hasMC) items.push(I_PSB_MC_ITEM);
+  return items;
+}
 
 const I_RV_ONSET: SoAItem[] = [
   { code: 'DTQ',      label: 'DTQ Positive — RV Onset Confirmed', category: 'Q',  critical: true,
@@ -482,43 +519,176 @@ export const VISIT_D42: VisitDef = {
 };
 
 // ─── Dynamic PSB visit generation ────────────────────────────────────────────
+// Implements Table 2 (Schedule of Assessments — Asymptomatic Phase) exactly.
+// Structure per 12-week repeat cycle:
+//   Block weeks (multiples of 4): 3-day consecutive block (Days N, N+1, N+2)
+//   Weeks 2, 5 within each 12-week period: Monthly Phone Call (standalone)
+//   Weeks 8, 12 within each 12-week period: Monthly Phone Call embedded in block
+//   SGRQ: Week 1 (baseline) + every 8 weeks from Week 8 (clinic visit, first day only)
 
-const PSB_SGRQ_WEEKS = new Set([8, 16, 24, 32, 40, 48, 64]);
+// Weeks with SGRQ: Week 1 (baseline) + Week 8 and every 8 weeks thereafter
+const PSB_SGRQ_WEEKS = new Set([1, 8, 16, 24, 32, 40, 48, 64]);
 
-/** Generates PSB visit defs up to maxWeeks. Pure function. */
+/**
+ * Generates PSB visit defs up to maxWeeks with per-week granularity.
+ * Exactly mirrors Table 2 of the SoA. Pure function.
+ */
 export function buildPSBVisitDefs(maxWeeks: number): VisitDef[] {
   const visits: VisitDef[] = [];
-  const totalMonths = Math.ceil(maxWeeks / 4);
-  for (let m = 1; m <= totalMonths; m++) {
-    const weekNum = m * 4;
-    if (weekNum > maxWeeks) break;
-    const hasSGRQ = PSB_SGRQ_WEEKS.has(weekNum);
+  if (maxWeeks < 1) return visits;
+
+  // ── Cycle 0: Week 1 (Days 1-3 block + Day 7), Week 2, Week 3 ─────────────
+  const c0End: number = Math.min(3, maxWeeks);
+  const c0Range = [1, c0End] as const;
+
+  // W1 Days 1-3 block (SGRQ baseline on Day 1; always present)
+  visits.push({
+    key: 'PSB_W1_BLOCK',
+    label: 'PSB Week 1 — Days 1–3 (3-Day Block) · SGRQ Baseline',
+    shortLabel: 'W1',
+    phase: 'psb',
+    window: 1,
+    dayRange: [1, 3] as const,
+    visitGroup: 'PSB_C0',
+    cycleRange: c0Range,
+    items: I_PSB_W1_BLOCK_ITEMS,
+    coordinationNotes: [
+      'PSB Phase starts today — confirm ePRO, DTQ, and home virology training complete.',
+      'SGRQ baseline: administered on Day 1. Patient completes before leaving clinic.',
+      'DTQ completed daily — any positive answer triggers RV Protocol immediately.',
+      'E-RS/PGIS, WURSS-11, and PRN inhaler tracking begin via ePRO today.',
+      'Assessments required on Days 1, 2, and 3 (each day of this block).',
+      'Next contact: Day 7 (±1 day) — end of Week 1.',
+    ],
+  });
+
+  if (maxWeeks >= 1) {
     visits.push({
-      key: `PSB_M${m}`,
-      label: `PSB Month ${m} — Week ${weekNum}${hasSGRQ ? ' (SGRQ Clinic Visit)' : ' (Monthly Call)'}`,
-      shortLabel: `W${weekNum}`,
+      key: 'PSB_W1_D7',
+      label: 'PSB Week 1 — Day 7',
+      shortLabel: 'W1 D7',
       phase: 'psb',
-      window: 5,
-      items: hasSGRQ ? I_PSB_SGRQ : I_PSB_MONTHLY,
-      coordinationNotes: hasSGRQ
-        ? [
-            `SGRQ Clinic Visit — patient must attend in person (Table 2).`,
-            'Contact patient ≥ 48h in advance to confirm clinic attendance.',
-            'SGRQ questionnaire completed by patient IN CLINIC before leaving.',
-            'Vital Signs collected at this SGRQ visit.',
-            'Review DTQ answers, E-RS trend, ConMeds, hospitalisations.',
-            `Next SGRQ clinic visit: approximately Week ${weekNum + 8}.`,
-          ]
-        : [
-            `Monthly call — contact within ±5 day window of Week ${weekNum}.`,
-            'Review DTQ: confirm NO positive answers since last contact.',
-            'Topics: comorbidities, COPD medications, infections, hospitalisations (fn. m).',
-            'Record contact date and time in eCRF.',
-            'Document any new or changed ConMeds.',
-            'Enquire about COPD-related hospitalisations since last call.',
-          ],
+      window: 1,
+      visitGroup: 'PSB_C0',
+      cycleRange: c0Range,
+      items: I_PSB_W1_D7_ITEMS,
+      coordinationNotes: [
+        'Weekly PSB contact — Day 7 (±1 day).',
+        'Confirm DTQ has been NO every day since Day 1.',
+        'Review ePRO compliance: E-RS/PGIS, WURSS-11, DTQ daily entries.',
+        'Next contact: Day 14 — Monthly Phone Call (±5 days).',
+      ],
     });
   }
+
+  if (maxWeeks >= 2) {
+    visits.push({
+      key: 'PSB_W2',
+      label: 'PSB Week 2 — Day 14 (Monthly Call)',
+      shortLabel: 'W2',
+      phase: 'psb',
+      window: 5,
+      visitGroup: 'PSB_C0',
+      cycleRange: c0Range,
+      items: buildPSBWeeklyItems(true),
+      coordinationNotes: [
+        'Monthly Phone Call — contact within ±5 days of Day 14.',
+        'Topics: comorbidities, COPD medications, new infections, hospitalisations (fn. m).',
+        'Confirm DTQ has remained negative daily.',
+        'Record exact contact date and time in eCRF.',
+        'Document any new or changed ConMeds.',
+        'Next weekly contact: Day 21 — Week 3.',
+      ],
+    });
+  }
+
+  if (maxWeeks >= 3) {
+    visits.push({
+      key: 'PSB_W3',
+      label: 'PSB Week 3 — Day 21',
+      shortLabel: 'W3',
+      phase: 'psb',
+      window: 5,
+      visitGroup: 'PSB_C0',
+      cycleRange: c0Range,
+      items: buildPSBWeeklyItems(false),
+      coordinationNotes: [
+        'Weekly PSB contact — Day 21 (±5 days).',
+        'Confirm DTQ has been negative all week.',
+        'Review ePRO compliance.',
+        'Next contact: Week 4 — Days 28–30 (3-Day Block).',
+      ],
+    });
+  }
+
+  // ── Cycles 1-N: 3-day block at week 4N + three weekly visits ──────────────
+  let cycleNum = 1;
+  for (let blockWeek = 4; blockWeek <= maxWeeks; blockWeek += 4, cycleNum++) {
+    const cycleEnd = Math.min(blockWeek + 3, maxWeeks);
+    const cGroup = `PSB_C${cycleNum}`;
+    const cRange = [blockWeek, cycleEnd] as const;
+    const dayStart = blockWeek * 7; // Day N of block (e.g. Day 28 for W4)
+    const hasSGRQ = PSB_SGRQ_WEEKS.has(blockWeek);
+    const blockHasMC = isMCWeek(blockWeek);
+
+    visits.push({
+      key: `PSB_W${blockWeek}_BLOCK`,
+      label: `PSB Week ${blockWeek} — Days ${dayStart}–${dayStart + 2} (3-Day Block)${hasSGRQ ? ' · SGRQ' : ''}${blockHasMC ? ' · Monthly Call' : ''}`,
+      shortLabel: `W${blockWeek}`,
+      phase: 'psb',
+      window: 3,
+      dayRange: [dayStart, dayStart + 2] as const,
+      visitGroup: cGroup,
+      cycleRange: cRange,
+      items: buildPSBBlockItems(hasSGRQ, blockHasMC),
+      coordinationNotes: hasSGRQ
+        ? [
+            `SGRQ Clinic Visit — patient attends in person (Days ${dayStart}–${dayStart + 2}).`,
+            `SGRQ administered on Day ${dayStart} (first day of block) — patient completes before leaving.`,
+            ...(blockHasMC ? [`Monthly Phone Call included in this clinic block (±5 days of Day ${dayStart}).`] : []),
+            'Confirm DTQ negative every day since last contact.',
+            'Review E-RS trend, WURSS-11 compliance, PRN use, ConMeds, hospitalisations.',
+            `Assessments required on Days ${dayStart}, ${dayStart + 1}, and ${dayStart + 2} (each day of block).`,
+            `Next 3-day block: Week ${blockWeek + 4} — Days ${(blockWeek + 4) * 7}–${(blockWeek + 4) * 7 + 2}.`,
+          ]
+        : [
+            `3-Day Block — assessments required on Days ${dayStart}, ${dayStart + 1}, and ${dayStart + 2}.`,
+            ...(blockHasMC ? [`Monthly Phone Call (±5-day window): contact around Day ${dayStart}.`] : []),
+            'Confirm DTQ has been negative all days since last contact.',
+            'Review E-RS/PGIS, WURSS-11, PRN usage, ConMeds, hospitalisations.',
+            `Weekly visits follow: Day ${dayStart + 7} (W${blockWeek + 1}), Day ${dayStart + 14} (W${blockWeek + 2}), Day ${dayStart + 21} (W${blockWeek + 3}).`,
+          ],
+    });
+
+    for (let w = blockWeek + 1; w <= Math.min(blockWeek + 3, maxWeeks); w++) {
+      const weekDay = w * 7;
+      const wHasMC = isMCWeek(w);
+      visits.push({
+        key: `PSB_W${w}`,
+        label: `PSB Week ${w} — Day ${weekDay}${wHasMC ? ' (Monthly Call)' : ''}`,
+        shortLabel: `W${w}`,
+        phase: 'psb',
+        window: 5,
+        visitGroup: cGroup,
+        cycleRange: cRange,
+        items: buildPSBWeeklyItems(wHasMC),
+        coordinationNotes: wHasMC
+          ? [
+              `Monthly Phone Call — contact within ±5 days of Day ${weekDay}.`,
+              'Topics: comorbidities, COPD meds, new infections, hospitalisations (fn. m).',
+              'Confirm DTQ has remained negative.',
+              'Record exact contact date and time in eCRF.',
+              'Document any new or changed ConMeds.',
+            ]
+          : [
+              `Weekly PSB contact — Day ${weekDay} (±5 days).`,
+              'Confirm DTQ has been negative since last contact.',
+              'Review ePRO compliance: E-RS/PGIS, WURSS-11, DTQ, PRN entries.',
+            ],
+      });
+    }
+  }
+
   return visits;
 }
 
@@ -582,10 +752,18 @@ function estimateVisitDate(
     case 'RV_D42':  return randomizationDate ? addDays(randomizationDate, 41) : null;
     default: break;
   }
-  if (def.key.startsWith('PSB_M')) {
-    const idx = psbVisitIndex.get(def.key) ?? -1;
-    if (idx < 0) return null;
-    return psbRef ? addDays(psbRef, (idx + 1) * 28) : null;
+  // PSB week-granular keys (Table 2)
+  if (def.key === 'PSB_W1_BLOCK') return psbRef ? addDays(psbRef, 0) : null;
+  if (def.key === 'PSB_W1_D7')   return psbRef ? addDays(psbRef, 6) : null;
+  const blockMatch = def.key.match(/^PSB_W(\d+)_BLOCK$/);
+  if (blockMatch) {
+    const w = parseInt(blockMatch[1], 10);
+    return psbRef ? addDays(psbRef, w * 7 - 1) : null; // Day w*7
+  }
+  const weekMatch = def.key.match(/^PSB_W(\d+)$/);
+  if (weekMatch) {
+    const w = parseInt(weekMatch[1], 10);
+    return psbRef ? addDays(psbRef, w * 7 - 1) : null; // Day w*7
   }
   return null;
 }
@@ -612,10 +790,10 @@ function determineOccurred(
     );
     default: break;
   }
-  if (def.key.startsWith('PSB_M')) {
-    const idx = psbVisitIndex.get(def.key) ?? -1;
-    if (idx < 0 || !psbRef) return false;
-    return addDays(psbRef, (idx + 1) * 28) <= today;
+  // PSB week-granular keys — occurred when estimated date is in the past
+  if (def.key.startsWith('PSB_')) {
+    const estimated = estimateVisitDate(patient, def, psbRef, psbVisitIndex);
+    return estimated != null && estimated <= today;
   }
   return false;
 }
@@ -632,7 +810,12 @@ export function getCurrentVisitKey(patient: Patient): string {
     if (dtqPos && !randomizationDate) return 'RV_ONSET';
     const ref = psbStartDate ?? screeningDate;
     const days = ref ? diffDays(ref, today) : 0;
-    return `PSB_M${Math.max(1, Math.ceil(days / 28))}`;
+    // Map elapsed days to current PSB visit key (Table 2 structure)
+    if (days <= 2) return 'PSB_W1_BLOCK';  // Days 1-3
+    if (days <= 6) return 'PSB_W1_D7';     // Days 4-7
+    // From Day 8 onwards: weekNum = floor(days/7) + 1
+    const weekNum = Math.min(Math.floor(days / 7) + 1, 68);
+    return weekNum % 4 === 0 ? `PSB_W${weekNum}_BLOCK` : `PSB_W${weekNum}`;
   }
   const ref = randomizationDate ?? rvInfectionDate;
   if (!ref) return 'RV_D1';
@@ -658,11 +841,13 @@ export function buildPatientTimeline(patient: Patient): VisitSnapshot[] {
 
   const psbRef = psbStartDate ?? screeningDate;
   const daysSincePsb = psbRef ? diffDays(psbRef, today) : 0;
-  const currentPSBWeek = Math.ceil(daysSincePsb / 7);
+  const currentPSBWeek = Math.max(1, Math.floor(daysSincePsb / 7) + 1);
+  // Show current week + 8 weeks ahead, minimum 16 weeks, maximum 68 weeks
   const psbMaxWeeks = Math.min(68, Math.max(currentPSBWeek + 8, 16));
   const psbVisitDefs = buildPSBVisitDefs(psbMaxWeeks);
 
-  // O(1) PSB visit index — avoids repeated O(n) findIndex inside the map loop
+  // Index kept for backward-compat signature of estimateVisitDate/determineOccurred
+  // PSB keys now use regex-based date calculation; this index is unused for PSB.
   const psbVisitIndex = new Map<string, number>(psbVisitDefs.map((v, i) => [v.key, i]));
 
   // O(1) task lookup — avoids re-concatenating all task arrays per assessment item
