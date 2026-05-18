@@ -260,6 +260,127 @@ function TabBar({ active, onChange, logCount, docCount }: {
   );
 }
 
+// ─── PSB helpers ─────────────────────────────────────────────────────────────
+
+function getPSBDayLabel(def: import('@/lib/timeline').VisitDef): string {
+  if (def.dayRange) return `Days ${def.dayRange[0]}–${def.dayRange[1]}`;
+  if (def.key === 'PSB_W1_D7') return 'Day 7';
+  const m = def.key.match(/^PSB_W(\d+)$/);
+  if (m) return `Day ${parseInt(m[1], 10) * 7}`;
+  return '';
+}
+
+// ─── Cycle Overview card ──────────────────────────────────────────────────────
+// Shows a compact summary of all visits in the same 4-week PSB cycle.
+
+function CycleOverviewCard({
+  cycleVisits,
+  selectedKey,
+  onSelectVisit,
+}: {
+  cycleVisits: VisitSnapshot[];
+  selectedKey: string;
+  onSelectVisit: (key: string) => void;
+}) {
+  if (cycleVisits.length === 0) return null;
+  const first = cycleVisits[0];
+  const range = first.def.cycleRange;
+  const cycleLabel = range ? `Weeks ${range[0]}–${range[1]}` : 'This Cycle';
+
+  return (
+    <div className="scard" style={{ marginBottom: '12px', overflow: 'hidden' }}>
+      <div className="scard-hdr" style={{
+        fontSize: '11px', letterSpacing: '0.05em', textTransform: 'uppercase',
+        background: 'var(--green-bg)', color: 'var(--green)',
+        display: 'flex', alignItems: 'center', gap: '6px',
+      }}>
+        <CalendarDays size={12} />
+        Cycle Overview — {cycleLabel}
+        <span style={{ marginLeft: 'auto', fontSize: '9px', opacity: 0.7, textTransform: 'none', letterSpacing: 0 }}>
+          Click a row to navigate
+        </span>
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px' }}>
+        <thead>
+          <tr style={{ background: 'var(--bg)' }}>
+            {['Week', 'Day(s)', 'Est. Date', 'Key Assessments', 'Status'].map(h => (
+              <th key={h} style={{
+                padding: '5px 10px', textAlign: 'left', fontSize: '9px',
+                fontWeight: 700, color: 'var(--t3)', letterSpacing: '0.04em',
+                borderBottom: '1px solid var(--border)',
+              }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {cycleVisits.map(cv => {
+            const isSelected = cv.def.key === selectedKey;
+            const ps2 = phStyle(cv.def.phase);
+            const dayLabel = getPSBDayLabel(cv.def);
+            const codes = cv.def.items.slice(0, 4).map(i => i.code).join(', ');
+            const extra = cv.def.items.length > 4 ? ` +${cv.def.items.length - 4}` : '';
+            let statusEl: React.ReactNode;
+            if (cv.status === 'past') {
+              statusEl = <span style={{ color: '#9CA3AF', fontSize: '10px' }}>Completed</span>;
+            } else if (cv.status === 'current') {
+              statusEl = (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '3px',
+                  background: 'var(--blue-bg)', color: 'var(--blue)',
+                  borderRadius: '3px', padding: '1px 5px', fontSize: '9px', fontWeight: 700,
+                }}>
+                  ● Active
+                </span>
+              );
+            } else {
+              statusEl = (
+                <span style={{ color: 'var(--t3)', fontSize: '10px' }}>
+                  {fmtDate(cv.estimatedDate)}
+                </span>
+              );
+            }
+            return (
+              <tr
+                key={cv.def.key}
+                onClick={() => onSelectVisit(cv.def.key)}
+                style={{
+                  cursor: 'pointer',
+                  background: isSelected ? `${ps2.bg}BB` : 'transparent',
+                  borderLeft: isSelected ? `3px solid ${ps2.dot}` : '3px solid transparent',
+                  transition: 'background 0.1s',
+                }}
+              >
+                <td style={{ padding: '7px 10px', borderBottom: '1px solid var(--border)', fontWeight: isSelected ? 700 : 400, color: isSelected ? ps2.text : 'var(--t1)' }}>
+                  {cv.def.shortLabel}
+                </td>
+                <td style={{ padding: '7px 10px', borderBottom: '1px solid var(--border)', color: 'var(--t2)', fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
+                  {dayLabel}
+                </td>
+                <td style={{ padding: '7px 10px', borderBottom: '1px solid var(--border)', color: 'var(--t2)', whiteSpace: 'nowrap' }}>
+                  {cv.status !== 'future' ? fmtDate(cv.estimatedDate) : (
+                    <span style={{ color: 'var(--t3)', fontStyle: 'italic' }}>
+                      Est. {fmtDate(cv.estimatedDate)}
+                    </span>
+                  )}
+                  {cv.def.window != null && (
+                    <span style={{ fontSize: '9.5px', color: 'var(--t3)', marginLeft: '4px' }}>±{cv.def.window}d</span>
+                  )}
+                </td>
+                <td style={{ padding: '7px 10px', borderBottom: '1px solid var(--border)', color: 'var(--t3)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {codes}{extra}
+                </td>
+                <td style={{ padding: '7px 10px', borderBottom: '1px solid var(--border)' }}>
+                  {statusEl}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface TimelineNavigatorProps {
@@ -328,6 +449,40 @@ export function TimelineNavigator({ patient, onClose }: TimelineNavigatorProps) 
   }, [snap]);
 
   const groupedAssessments = useMemo(() => snap ? groupAssessments(snap.assessments) : {}, [snap]);
+
+  // ── PSB cycle support ─────────────────────────────────────────────────────
+  // All visits in the same 4-week cycle as the currently selected visit.
+  const cycleVisits = useMemo(() => {
+    if (!snap?.def.visitGroup) return null;
+    return timeline.filter(s => s.def.visitGroup === snap.def.visitGroup);
+  }, [timeline, snap]);
+
+  // Cycle group spans for the matrix header (used to paint cycle separators).
+  const cycleGroupSpans = useMemo(() => {
+    type Span = { key: string; label: string; colSpan: number; firstVisitKey: string; status: 'past' | 'current' | 'future' };
+    const spans: Span[] = [];
+    let i = 0;
+    while (i < timeline.length) {
+      const s = timeline[i];
+      const group = s.def.visitGroup;
+      if (!group) {
+        spans.push({ key: s.def.key, label: '', colSpan: 1, firstVisitKey: s.def.key, status: s.status });
+        i++;
+      } else {
+        let j = i;
+        while (j < timeline.length && timeline[j].def.visitGroup === group) j++;
+        const groupSnaps = timeline.slice(i, j);
+        const range = s.def.cycleRange;
+        const label = range ? `W${range[0]}–W${range[1]}` : group;
+        const hasCurrent = groupSnaps.some(gs => gs.status === 'current');
+        const allPast    = groupSnaps.every(gs => gs.status === 'past');
+        const groupStatus: Span['status'] = hasCurrent ? 'current' : allPast ? 'past' : 'future';
+        spans.push({ key: group, label, colSpan: j - i, firstVisitKey: s.def.key, status: groupStatus });
+        i = j;
+      }
+    }
+    return spans;
+  }, [timeline]);
 
   // ── Scroll selected column into view ─────────────────────────────────────
   useEffect(() => {
@@ -443,20 +598,70 @@ export function TimelineNavigator({ patient, onClose }: TimelineNavigatorProps) 
           <div ref={matrixScrollRef} style={{ height: '100%', overflowX: 'auto', overflowY: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', minWidth: 'max-content', fontSize: '11px', tableLayout: 'fixed' }}>
               <thead>
+                {/* ── Row 1: Cycle group labels ── */}
                 <tr>
-                  {/* Sticky top-left corner */}
-                  <th style={{
+                  {/* Sticky corner spans both header rows */}
+                  <th rowSpan={2} style={{
                     position: 'sticky', left: 0, top: 0, zIndex: 30,
                     background: 'var(--surface)', width: 175, minWidth: 175,
                     padding: '5px 10px',
                     borderRight: '2px solid var(--border)', borderBottom: '1px solid var(--border)',
                     textAlign: 'left', fontSize: '9px', fontWeight: 700,
                     letterSpacing: '0.06em', color: 'var(--t3)', textTransform: 'uppercase',
+                    verticalAlign: 'middle',
                   }}>
                     Assessment
                   </th>
+                  {cycleGroupSpans.map(span => {
+                    if (!span.label) {
+                      // Non-PSB single visit: empty cell placeholder
+                      return (
+                        <th key={span.key} style={{
+                          position: 'sticky', top: 0, zIndex: 22,
+                          width: 42, minWidth: 42,
+                          background: 'var(--surface)',
+                          borderBottom: '1px solid var(--border)',
+                          borderRight: '1px solid var(--border)',
+                        }} />
+                      );
+                    }
+                    const isCycleSel = snap?.def.visitGroup === span.key;
+                    const cycBg = span.status === 'past' ? '#F3F4F6' :
+                                  span.status === 'current' ? 'var(--blue-bg)' : 'var(--green-bg)';
+                    const cycText = span.status === 'past' ? '#9CA3AF' :
+                                    span.status === 'current' ? 'var(--blue)' : 'var(--green)';
+                    return (
+                      <th
+                        key={span.key}
+                        colSpan={span.colSpan}
+                        onClick={() => { setSelectedKey(span.firstVisitKey); setActiveTab('assessments'); }}
+                        title={`PSB ${span.label} — click to navigate`}
+                        style={{
+                          position: 'sticky', top: 0, zIndex: 22,
+                          padding: '2px 4px',
+                          background: isCycleSel ? cycBg : 'var(--surface)',
+                          borderBottom: isCycleSel ? `2px solid ${cycText}` : '1px solid var(--border)',
+                          borderRight: '2px solid var(--border)',
+                          borderLeft: '1px solid var(--border)',
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          transition: 'background 0.15s',
+                        }}
+                      >
+                        <span style={{
+                          fontSize: '8.5px', fontWeight: isCycleSel ? 700 : 500,
+                          color: isCycleSel ? cycText : 'var(--t3)',
+                          letterSpacing: '0.03em', whiteSpace: 'nowrap',
+                        }}>
+                          {span.label}
+                        </span>
+                      </th>
+                    );
+                  })}
+                </tr>
 
-                  {/* Visit column headers */}
+                {/* ── Row 2: Individual visit chips ── */}
+                <tr>
                   {timeline.map(s => {
                     const isSel = s.def.key === selectedKey;
                     const isCur = s.status === 'current';
@@ -468,7 +673,7 @@ export function TimelineNavigator({ patient, onClose }: TimelineNavigatorProps) 
                         onClick={() => { setSelectedKey(s.def.key); setActiveTab('assessments'); }}
                         title={s.def.label}
                         style={{
-                          position: 'sticky', top: 0, zIndex: 20,
+                          position: 'sticky', top: '20px', zIndex: 20,
                           width: 42, minWidth: 42, padding: 0,
                           cursor: 'pointer',
                           background: isSel ? p2.bg : 'var(--surface)',
@@ -658,6 +863,15 @@ export function TimelineNavigator({ patient, onClose }: TimelineNavigatorProps) 
             {/* ── ASSESSMENTS ──────────────────────────────────────────────── */}
             {activeTab === 'assessments' && (
               <div style={{ padding: '12px 14px 24px' }}>
+
+                {/* Cycle Overview — shown for all PSB visits with a group */}
+                {cycleVisits && cycleVisits.length > 1 && (
+                  <CycleOverviewCard
+                    cycleVisits={cycleVisits}
+                    selectedKey={selectedKey}
+                    onSelectVisit={key => { setSelectedKey(key); }}
+                  />
+                )}
 
                 {snap.status !== 'current' && (
                   <div style={{
