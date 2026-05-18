@@ -33,7 +33,7 @@ import {
   type AssessmentCategory,
   type AssessmentResult,
 } from '@/lib/timeline';
-import { type Patient, type LogEntry, fmtISO } from '@/lib/data';
+import { type Patient, type LogEntry, fmtISO, addDays } from '@/lib/data';
 
 // ─── Category metadata ────────────────────────────────────────────────────────
 
@@ -362,9 +362,13 @@ function CycleOverviewCard({
                       Est. {fmtDate(cv.estimatedDate)}
                     </span>
                   )}
-                  {cv.def.window != null && (
+                  {cv.def.dayRange ? (
+                    <span style={{ fontSize: '9.5px', color: 'var(--t3)', marginLeft: '4px' }}>
+                      {cv.def.dayRange[1] - cv.def.dayRange[0] + 1}d block
+                    </span>
+                  ) : cv.def.window != null ? (
                     <span style={{ fontSize: '9.5px', color: 'var(--t3)', marginLeft: '4px' }}>±{cv.def.window}d</span>
-                  )}
+                  ) : null}
                 </td>
                 <td style={{ padding: '7px 10px', borderBottom: '1px solid var(--border)', color: 'var(--t3)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {codes}{extra}
@@ -503,7 +507,10 @@ export function TimelineNavigator({ patient, onClose }: TimelineNavigatorProps) 
   if (!snap) return null;
 
   const ps          = phStyle(snap.def.phase);
-  const visitWindow = snap.def.window != null ? ` ±${snap.def.window}d` : '';
+  // visitWindow: show block range (Days N–N+2), ±window, or nothing for exact dates.
+  const visitWindow = snap.def.dayRange
+    ? ` Days ${snap.def.dayRange[0]}–${snap.def.dayRange[1]}`
+    : snap.def.window != null ? ` ±${snap.def.window}d` : '';
   const pastCount   = timeline.filter(s => s.status === 'past').length;
   const futureCount = timeline.filter(s => s.status === 'future').length;
 
@@ -933,24 +940,40 @@ export function TimelineNavigator({ patient, onClose }: TimelineNavigatorProps) 
                     <CalendarDays size={12} /> Visit Scheduling
                   </div>
                   <div style={{ padding: '12px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                    {[
-                      { label: 'Target Date', value: fmtDate(snap.estimatedDate) },
-                      { label: 'Window',       value: snap.def.window != null ? `±${snap.def.window} days` : 'Fixed date' },
-                      { label: 'Status',       value: snap.status === 'past' ? 'Completed' : snap.status === 'current' ? 'Active' : 'Upcoming' },
-                      {
-                        label: 'Window Open',
-                        value: snap.estimatedDate && snap.def.window
-                          ? fmtDate(new Date(snap.estimatedDate.getTime() - snap.def.window * 86400000))
-                          : '—',
-                      },
-                      {
-                        label: 'Window Close',
-                        value: snap.estimatedDate && snap.def.window
-                          ? fmtDate(new Date(snap.estimatedDate.getTime() + snap.def.window * 86400000))
-                          : '—',
-                      },
-                      { label: 'Phase', value: snap.def.phase.toUpperCase() },
-                    ].map(({ label, value }) => (
+                    {(() => {
+                      const dr = snap.def.dayRange;
+                      const win = snap.def.window;
+                      const blockEnd = dr && snap.estimatedDate
+                        ? addDays(new Date(snap.estimatedDate), dr[1] - dr[0])
+                        : null;
+                      return [
+                        { label: 'Target Date',   value: fmtDate(snap.estimatedDate) },
+                        {
+                          label: 'Window',
+                          value: dr
+                            ? `Days ${dr[0]}–${dr[1]} (3-day block)`
+                            : win != null ? `±${win} days` : 'Exact date (no window)',
+                        },
+                        { label: 'Status', value: snap.status === 'past' ? 'Completed' : snap.status === 'current' ? 'Active' : 'Upcoming' },
+                        {
+                          label: 'Window Open',
+                          value: dr
+                            ? fmtDate(snap.estimatedDate)           // block start = first day
+                            : win != null && snap.estimatedDate
+                              ? fmtDate(addDays(new Date(snap.estimatedDate), -win))
+                              : '—',
+                        },
+                        {
+                          label: 'Window Close',
+                          value: dr
+                            ? fmtDate(blockEnd)                     // block end = last day
+                            : win != null && snap.estimatedDate
+                              ? fmtDate(addDays(new Date(snap.estimatedDate), win))
+                              : '—',
+                        },
+                        { label: 'Phase', value: snap.def.phase.toUpperCase() },
+                      ];
+                    })().map(({ label, value }) => (
                       <div key={label}>
                         <div style={{ fontSize: '9.5px', color: 'var(--t3)', fontWeight: 600, marginBottom: '2px', letterSpacing: '0.03em' }}>
                           {label}
