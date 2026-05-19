@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Clock, Plus, X, CheckCircle, ChevronDown, Loader,
+  Clock, Plus, X, CheckCircle, Loader,
   AlignLeft, Tag, Timer, MessageSquare,
 } from 'lucide-react';
 import {
@@ -127,184 +127,203 @@ export function WorkloadLogger({ onClose }: WorkloadLoggerProps) {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      {/* Backdrop */}
+    <div className="modal-overlay" onClick={onClose}>
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Panel */}
-      <div
-        className="relative w-full sm:max-w-lg max-h-[90vh] overflow-y-auto bg-white dark:bg-neutral-900 rounded-t-2xl sm:rounded-2xl shadow-2xl border border-neutral-200 dark:border-neutral-700 flex flex-col"
+        className="modal-card"
+        onClick={e => e.stopPropagation()}
+        style={{ maxHeight: '90vh', overflowY: 'auto', maxWidth: '480px' }}
         role="dialog"
         aria-modal="true"
-        aria-label="Workload Logger"
+        aria-label="Log Off-Platform Time"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-200 dark:border-neutral-700">
-          <div className="flex items-center gap-2">
-            <Clock size={18} className="text-blue-600 dark:text-blue-400" />
-            <span className="font-semibold text-sm text-neutral-900 dark:text-neutral-100">
-              Log Off-Platform Time
-            </span>
+        <div className="modal-hdr">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Clock size={18} style={{ color: 'var(--blue)', flexShrink: 0 }} />
+            <div className="modal-title">Log Off-Platform Time</div>
           </div>
-          {!loadingLogs && todayTotalMinutes > 0 && (
-            <span className="text-xs text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-full">
-              Today: {fmtDuration(todayTotalMinutes)} logged
-            </span>
-          )}
-          <button
-            onClick={onClose}
-            className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition-colors rounded-md p-0.5"
-            aria-label="Close"
-          >
-            <X size={16} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {!loadingLogs && todayTotalMinutes > 0 && (
+              <span style={{
+                fontSize: '11px', color: 'var(--t3)',
+                background: 'var(--bg)', border: '1px solid var(--border)',
+                borderRadius: '100px', padding: '2px 8px', whiteSpace: 'nowrap',
+              }}>
+                Today: {fmtDuration(todayTotalMinutes)} logged
+              </span>
+            )}
+            <button type="button" className="ibtn" onClick={onClose} aria-label="Close">
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 flex-1">
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body">
 
-          {/* Category */}
-          <div className="space-y-1.5">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300">
-              <Tag size={12} /> Category
-            </label>
-            <div className="relative">
+            {/* Category */}
+            <div style={{ marginBottom: '20px' }}>
+              <label className="modal-label">
+                <Tag size={12} aria-hidden="true" /> Category
+              </label>
               <select
+                className="modal-input"
                 value={category}
                 onChange={e => setCategory(e.target.value as DeclarativeTaskCategory)}
-                className="w-full appearance-none bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
               >
                 {CATEGORIES.map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
-              <ChevronDown
-                size={14}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-400"
+            </div>
+
+            {/* Task description */}
+            <div style={{ marginBottom: '20px' }}>
+              <label className="modal-label">
+                <AlignLeft size={12} aria-hidden="true" /> Task Description
+              </label>
+              <input
+                type="text"
+                className="modal-input"
+                value={taskLabel}
+                onChange={e => setTaskLabel(e.target.value)}
+                placeholder="e.g. Site initiation call with sponsor"
+                maxLength={200}
+                autoComplete="off"
               />
             </div>
-          </div>
 
-          {/* Task description */}
-          <div className="space-y-1.5">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300">
-              <AlignLeft size={12} /> Task Description
-            </label>
-            <input
-              type="text"
-              value={taskLabel}
-              onChange={e => setTaskLabel(e.target.value)}
-              placeholder="e.g. Site initiation call with sponsor"
-              maxLength={200}
-              className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {/* Duration */}
-          <div className="space-y-1.5">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300">
-              <Timer size={12} /> Duration (minutes)
-            </label>
-            <div className="flex gap-2 flex-wrap">
-              {DURATION_PRESETS.map(p => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setDurationMinutes(p)}
-                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                    durationMinutes === p
-                      ? 'bg-blue-600 border-blue-600 text-white'
-                      : 'bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-600 text-neutral-700 dark:text-neutral-300 hover:border-blue-400'
-                  }`}
-                >
-                  {fmtDuration(p)}
-                </button>
-              ))}
+            {/* Duration */}
+            <div style={{ marginBottom: '20px' }}>
+              <label className="modal-label">
+                <Timer size={12} aria-hidden="true" /> Duration (minutes)
+              </label>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                {DURATION_PRESETS.map(p => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setDurationMinutes(p)}
+                    style={{
+                      fontSize: '11px',
+                      padding: '4px 12px',
+                      borderRadius: '100px',
+                      border: `1px solid ${durationMinutes === p ? 'var(--blue)' : 'var(--border2)'}`,
+                      background: durationMinutes === p ? 'var(--blue)' : 'var(--bg)',
+                      color: durationMinutes === p ? '#fff' : 'var(--t2)',
+                      cursor: 'pointer',
+                      transition: 'all 140ms var(--ease)',
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                  >
+                    {fmtDuration(p)}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="number"
+                className="modal-input"
+                value={durationMinutes}
+                onChange={e => setDurationMinutes(e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder="Or enter exact minutes"
+                min={1}
+                max={720}
+              />
             </div>
-            <input
-              type="number"
-              value={durationMinutes}
-              onChange={e => setDurationMinutes(e.target.value === '' ? '' : Number(e.target.value))}
-              placeholder="Or enter exact minutes"
-              min={1}
-              max={720}
-              className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
 
-          {/* Notes (optional) */}
-          <div className="space-y-1.5">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300">
-              <MessageSquare size={12} /> Notes <span className="text-neutral-400 font-normal">(optional)</span>
-            </label>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder="Additional context or follow-up actions"
-              rows={2}
-              maxLength={500}
-              className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-            />
-          </div>
+            {/* Notes (optional) */}
+            <div style={{ marginBottom: submitError ? '20px' : '0' }}>
+              <label className="modal-label">
+                <MessageSquare size={12} aria-hidden="true" /> Notes{' '}
+                <span style={{ color: 'var(--t4)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+                  (optional)
+                </span>
+              </label>
+              <textarea
+                className="modal-input"
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Additional context or follow-up actions"
+                rows={2}
+                maxLength={500}
+                style={{ resize: 'none', minHeight: 'auto' }}
+              />
+            </div>
 
-          {/* Error */}
-          {submitError && (
-            <p className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg">
-              {submitError}
-            </p>
-          )}
+            {/* Error */}
+            {submitError && (
+              <div style={{
+                padding: '10px 12px',
+                background: 'var(--red-bg)',
+                border: '1px solid var(--red-mid)',
+                borderRadius: 'var(--r1)',
+                color: 'var(--red)',
+                fontSize: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}>
+                {submitError}
+              </div>
+            )}
+
+          </div>
 
           {/* Submit */}
-          <button
-            type="submit"
-            disabled={submitting || submitted}
-            className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all ${
-              submitted
-                ? 'bg-green-600 text-white'
-                : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white disabled:opacity-60 disabled:cursor-not-allowed'
-            }`}
-          >
-            {submitting ? (
-              <><Loader size={14} className="animate-spin" /> Saving…</>
-            ) : submitted ? (
-              <><CheckCircle size={14} /> Logged</>
-            ) : (
-              <><Plus size={14} /> Log Time</>
-            )}
-          </button>
+          <div className="modal-footer">
+            <button
+              type="submit"
+              disabled={submitting || submitted}
+              className={submitted ? 'btn btn-success' : 'btn btn-primary'}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            >
+              {submitting ? (
+                <><Loader size={14} className="animate-spin" /> Saving…</>
+              ) : submitted ? (
+                <><CheckCircle size={14} /> Logged</>
+              ) : (
+                <><Plus size={14} /> Log Time</>
+              )}
+            </button>
+          </div>
         </form>
 
         {/* Recent logs for today */}
         {(loadingLogs || recentLogs.length > 0) && (
-          <div className="border-t border-neutral-200 dark:border-neutral-700 px-5 pb-5 pt-4">
-            <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-3">
+          <div style={{ borderTop: '1px solid var(--border)', padding: '16px 24px 20px' }}>
+            <p style={{
+              fontSize: '11px', fontWeight: 700, color: 'var(--t3)',
+              textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '10px',
+            }}>
               Today&apos;s Entries
             </p>
 
             {loadingLogs ? (
-              <div className="flex items-center gap-2 text-xs text-neutral-400">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--t4)' }}>
                 <Loader size={12} className="animate-spin" /> Loading…
               </div>
             ) : (
-              <ul className="space-y-2">
+              <ul style={{ display: 'flex', flexDirection: 'column', gap: '8px', listStyle: 'none', padding: 0, margin: 0 }}>
                 {recentLogs.map(log => (
                   <li
                     key={log.id}
-                    className="flex items-start gap-3 text-xs text-neutral-700 dark:text-neutral-300"
+                    style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '12px', color: 'var(--t2)' }}
                   >
-                    <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium truncate">{log.taskLabel}</span>
-                        <span className="shrink-0 text-neutral-400">
+                    <span style={{
+                      marginTop: '5px', width: '6px', height: '6px', borderRadius: '50%',
+                      background: 'var(--blue)', flexShrink: 0, display: 'inline-block',
+                    }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                        <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {log.taskLabel}
+                        </span>
+                        <span style={{ flexShrink: 0, color: 'var(--t3)', fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
                           {fmtDuration(log.durationMinutes)}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-neutral-400 mt-0.5">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--t3)', fontSize: '11px', marginTop: '2px' }}>
                         <span>{DECLARATIVE_CATEGORY_LABELS[log.taskCategory]}</span>
                         <span>·</span>
                         <span>{fmtTime(log.timestamp)}</span>
