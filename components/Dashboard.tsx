@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { 
-  Search, Bell, HelpCircle, UserPlus, Lock, 
-  AlertTriangle, Check, Phone, Activity, 
+import {
+  Search, Bell, HelpCircle, UserPlus, Lock,
+  AlertTriangle, Check, Phone, Activity,
   ChevronRight, ClipboardList, User, Settings as SettingsIcon,
-  LayoutGrid, List, Calendar as CalendarIcon
+  LayoutGrid, List, Calendar as CalendarIcon, BarChart2,
 } from 'lucide-react';
 import { 
   type Patient, type Notification, 
@@ -24,15 +24,16 @@ interface DashboardProps {
   onOpenHelp: () => void;
   onOpenAddPatient: () => void;
   onOpenSettings: () => void;
+  onOpenStats: () => void;
   onLock: () => void;
   onOpenPatient: (id: string) => void;
   onDLPViolation: (action: string) => void;
 }
 
-export const Dashboard = ({ 
-  patients, notifications, dashFilter, setDashFilter, 
-  onOpenSearch, onOpenBriefing, onOpenNotif, onOpenHelp, 
-  onOpenAddPatient, onOpenSettings, onLock, onOpenPatient, onDLPViolation 
+export const Dashboard = ({
+  patients, notifications, dashFilter, setDashFilter,
+  onOpenSearch, onOpenBriefing, onOpenNotif, onOpenHelp,
+  onOpenAddPatient, onOpenSettings, onOpenStats, onLock, onOpenPatient, onDLPViolation,
 }: DashboardProps) => {
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'calendar'>('grid');
 
@@ -87,6 +88,7 @@ export const Dashboard = ({
           </div>
           <div style={{ width: '1px', height: '24px', background: '#E2E8F0' }}></div>
           <div className="nav-group" style={{ display: 'flex', gap: '8px' }}>
+            <button type="button" className="ibtn" onClick={onOpenStats} title="My Activity — Statistics"><BarChart2 size={16} /> My Activity</button>
             <button type="button" className="ibtn" onClick={onOpenHelp} title="Help & Glossary"><HelpCircle size={16} /></button>
             <button type="button" className="ibtn" onClick={onOpenSettings} title="Settings & Security"><SettingsIcon size={16} /></button>
             <button type="button" className="ibtn" onClick={onLock} title="Lock Session"><Lock size={16} /></button>

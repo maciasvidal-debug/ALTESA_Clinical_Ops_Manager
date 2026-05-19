@@ -38,6 +38,7 @@ import { RescreeningWizard } from '@/components/RescreeningWizard';
 import { DLPWrapper } from '@/components/DLPWrapper';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { WorkloadLogger } from '@/components/WorkloadLogger';
+import { StatsScreen } from '@/components/StatsScreen';
 import { TimelineNavigator } from '@/components/TimelineNavigator';
 import { checkTaskCompletion } from '@/lib/task-utils';
 import { classifyFirebaseError, shouldClearOnRevocation } from '@/lib/auth-utils';
@@ -133,7 +134,7 @@ export default function App() {
     }
   }, [patients, isLoadingDb]);
 
-  const [screen, setScreen] = useState<'auth' | 'dashboard' | 'patient' | 'manager_dashboard' | 'settings'>('auth');
+  const [screen, setScreen] = useState<'auth' | 'dashboard' | 'patient' | 'manager_dashboard' | 'settings' | 'stats'>('auth');
   const [role, setRole] = useState<'coordinator' | 'manager'>('coordinator');
   const [authMode, setAuthMode] = useState<'crc' | 'manager'>('crc');
   const [pin, setPin] = useState('');
@@ -713,6 +714,7 @@ export default function App() {
         showToast('Assessment unchecked', 'ok');
       } else {
         s.add(code);
+        trackEvent('task_completed', { taskCode: code });
         showToast('Assessment marked complete', 'ok');
       }
       next[pid] = s;
@@ -1037,6 +1039,7 @@ export default function App() {
           onOpenHelp={() => setHelpOpen(true)}
           onOpenAddPatient={() => { setAddPatientOpen(true); setModalErr(''); }}
           onOpenSettings={() => setScreen('settings')}
+          onOpenStats={() => setScreen('stats')}
           onLock={() => { setPin(''); setScreen('auth'); }}
           onOpenPatient={openPatient}
           onDLPViolation={handleDLPViolation}
@@ -1257,6 +1260,22 @@ export default function App() {
           />
         )}
 
+        <Toasts toasts={toasts} />
+      </>
+    );
+  }
+
+  // Stats Screen
+  if (screen === 'stats') {
+    return (
+      <>
+        <ErrorBoundary context="StatsScreen">
+          <StatsScreen
+            patients={patients}
+            onClose={() => setScreen('dashboard')}
+            countTasksFn={countTasks}
+          />
+        </ErrorBoundary>
         <Toasts toasts={toasts} />
       </>
     );
