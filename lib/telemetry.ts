@@ -23,7 +23,7 @@ import { filterPII } from './crypto';
 
 // ── Type Taxonomy ─────────────────────────────────────────────────────────────
 
-export type AppScreen = 'auth' | 'dashboard' | 'patient' | 'manager_dashboard' | 'settings';
+export type AppScreen = 'auth' | 'dashboard' | 'patient' | 'manager_dashboard' | 'settings' | 'stats';
 
 export type ObservationalEventType =
   | 'session_start'
