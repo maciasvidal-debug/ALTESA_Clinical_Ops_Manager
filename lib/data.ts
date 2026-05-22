@@ -361,7 +361,6 @@ export const PATIENTS: Patient[] = [
       ],
       pr: [
         { code: 'VS', label: 'Vital Signs', icon: '🩺', done: true, note: 'Seated ≥ 5 min (fn. d)' },
-        { code: 'OSC', label: 'Oscillometry', icon: '🫁', done: false, seq: true, note: 'Perform BEFORE spirometry if both scheduled (fn. f)' },
         { code: 'CVC', label: 'Central Virology Collection', icon: '🦠', done: false, note: 'Mid-turbinate nasal swab each nostril — qRT-PCR, susceptibility, resistance, genotyping (fn. g)' },
         { code: 'PK', label: 'Sparse PK Sampling — PRIOR to Day 3 dosing', icon: '🩸', done: false, note: '~24 h after last (Day 2) dose. Document sample time AND drug administration time (fn. j)' },
         { code: 'DRUG', label: 'Study Drug Dosing — Day 3', icon: '💊', done: false, note: 'Once daily', dependsOn: ['CVC', 'PK'], requiresData: { label: 'Time of Dose', type: 'time' } },
