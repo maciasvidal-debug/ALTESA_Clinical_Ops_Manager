@@ -806,9 +806,9 @@ function determineOccurred(
     case 'RV_D7':   return !!randomizationDate && diffDays(randomizationDate, today) > 7;
     case 'RV_D14':  return !!randomizationDate && diffDays(randomizationDate, today) > 14;
     case 'RV_D28':  return !!randomizationDate && diffDays(randomizationDate, today) > 28;
-    case 'RV_D42':  return (
-      !!resolution || (!!randomizationDate && diffDays(randomizationDate, today) > 42)
-    );
+    // resolution = clinical resolution date, NOT visit completion.
+    // EOS visit is required regardless of when the patient resolved.
+    case 'RV_D42':  return !!randomizationDate && diffDays(randomizationDate, today) > 42;
     default: break;
   }
   // PSB week-granular keys — occurred when estimated date is in the past
