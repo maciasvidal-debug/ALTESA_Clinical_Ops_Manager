@@ -384,6 +384,34 @@ abbr[title] { text-decoration: underline dotted var(--border2); cursor: help; te
 .wz-missing-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--amber); font-weight: 500; padding: 3px 8px; background: var(--amber-bg); border: 1px solid var(--amber-mid); border-radius: 4px; transition: opacity 200ms; }
 .wz-missing-badge.none { opacity: 0; pointer-events: none; }
 
+/* ─── Rescreening wizard: labeled stepper + readonly form grid ─── */
+/* These classes complement the existing .wz-* set used by Wizard.tsx.
+   Keep names scoped (wz-lstep*, wz-field*) so they cannot collide. */
+.wz-lstepper { display: flex; align-items: stretch; gap: 0; padding: 12px 22px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.wz-lstep { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 6px 4px; background: none; border: none; cursor: pointer; font: inherit; color: var(--t3); text-align: left; border-radius: var(--r1); transition: color 140ms var(--ease); }
+.wz-lstep:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.wz-lstep:hover { color: var(--t2); }
+.wz-lstep-icon { width: 26px; height: 26px; border-radius: 50%; background: var(--surface); border: 1.5px solid var(--border2); display: flex; align-items: center; justify-content: center; color: var(--t3); flex-shrink: 0; transition: all 140ms var(--ease); }
+.wz-lstep-label { font-size: 11.5px; font-weight: 500; line-height: 1.2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wz-lstep.active { color: var(--blue); }
+.wz-lstep.active .wz-lstep-icon { background: var(--blue); border-color: var(--blue); color: #fff; box-shadow: 0 0 0 3px var(--blue-bg); }
+.wz-lstep.active .wz-lstep-label { font-weight: 700; }
+.wz-lstep.done { color: var(--green); }
+.wz-lstep.done .wz-lstep-icon { background: var(--green); border-color: var(--green); color: #fff; }
+.wz-lstep-line { flex: 0 0 14px; height: 2px; background: var(--border); border-radius: 1px; align-self: center; margin: 0 4px; }
+.wz-lstep-line.done { background: var(--green); }
+
+.wz-field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.wz-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wz-field > label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; color: var(--t3); text-transform: uppercase; }
+.wz-field > input { font: inherit; font-size: 13px; color: var(--t1); background: var(--bg); border: 1px solid var(--border); border-radius: var(--r1); padding: 9px 11px; min-height: 40px; transition: border-color 140ms var(--ease); width: 100%; box-sizing: border-box; }
+.wz-field > input:focus { outline: 2px solid var(--blue); outline-offset: 0; border-color: var(--blue); }
+.wz-field > input:disabled { background: var(--surface); color: var(--t1); cursor: default; opacity: 1; -webkit-text-fill-color: var(--t1); }
+@media (max-width: 560px) {
+  .wz-field-grid { grid-template-columns: 1fr; }
+  .wz-lstep-label { display: none; }
+}
+
 /* ─── BUTTONS ─── */
 .btn { padding: 11px 20px; border-radius: var(--r1); font-family: var(--fu); font-size: 12.5px; font-weight: 600; cursor: pointer; transition: all 140ms var(--ease); border: none; letter-spacing: .02em; min-height: 44px; }
 /* 🎨 UX-1: keyboard focus ring for all .btn variants */
