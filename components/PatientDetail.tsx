@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import {
   type Patient, type Task, type Document, type LogEntry,
-  fmtHuman, fmtISO, getTodayPct, countTasks
+  fmtHuman, fmtISO, getTodayPct, getTodayLabel, countTasks
 } from '@/lib/data';
 import { DependencyLines } from './DependencyLines';
 import { DLPWrapper } from '@/components/DLPWrapper';
@@ -235,7 +235,7 @@ export const PatientDetail = ({
                   <div className="tl-seg s-tx" style={{ flex: '0 0 4.6%' }}><span>TREATMENT</span></div>
                   <div className="tl-seg s-fu" style={{ flex: '0 0 23.4%' }}><span>FOLLOW-UP</span></div>
                   <div className="tl-now-marker" style={{ left: `${getTodayPct(patient).toFixed(1)}%` }}></div>
-                  <div className="tl-now-label" style={{ left: `${getTodayPct(patient).toFixed(1)}%` }}>Today (Day {patient.studyDay})</div>
+                  <div className="tl-now-label" style={{ left: `${getTodayPct(patient).toFixed(1)}%` }}>Today · {getTodayLabel(patient)}</div>
                 </div>
                 <div className="tl-labels">
                   <div style={{ flex: '0 0 10%' }}>Screening</div>

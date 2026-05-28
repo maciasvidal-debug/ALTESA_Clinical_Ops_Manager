@@ -28,10 +28,16 @@ export function getTodayPct(p: any) {
   const FUP_PCT = 23.4;
   const today = getToday();
 
-  if (p.phaseCode === 'scr' || p.phaseCode === 'rescr') {
+  if (p.phaseCode === 'scr') {
     const days = Math.max(0, diffDays(p.screeningDate, today));
     return Math.min(SCR_PCT, (days / 42) * SCR_PCT);
-  } 
+  }
+  // Rescreening occurs at Week 48 or Week 68 of PSB — position must reflect
+  // elapsed PSB time, not screening time. Using the same formula as 'psb'.
+  if (p.phaseCode === 'rescr') {
+    const days = Math.max(0, diffDays(p.psbStartDate || p.screeningDate, today));
+    return SCR_PCT + Math.min(PSB_PCT, (days / 476) * PSB_PCT);
+  }
   else if (p.phaseCode === 'tx') {
     const days = Math.max(0, diffDays(p.randomizationDate || p.rvInfectionDate || today, today));
     return SCR_PCT + PSB_PCT + RV_PCT + Math.min(TX_PCT, (days / 7) * TX_PCT);
@@ -48,8 +54,38 @@ export function getTodayPct(p: any) {
     const days = Math.max(0, diffDays(p.psbStartDate || p.screeningDate, today));
     return SCR_PCT + Math.min(PSB_PCT, (days / 476) * PSB_PCT);
   }
-  
+
   return 100;
+}
+
+/**
+ * Returns a concise study-position label for the timeline marker.
+ * Never returns "Day undefined" — falls back to phase label if anchor dates
+ * are unavailable.
+ */
+export function getTodayLabel(p: any): string {
+  const today = getToday();
+  if (p.phaseCode === 'scr') {
+    const d = Math.max(0, diffDays(p.screeningDate, today)) + 1;
+    return `Day ${d}`;
+  }
+  if (p.phaseCode === 'psb' || p.phaseCode === 'rescr') {
+    const ref = p.psbStartDate || p.screeningDate;
+    if (ref) {
+      const days = Math.max(0, diffDays(ref, today));
+      const week = Math.max(1, Math.floor(days / 7) + 1);
+      return `Week ${week}`;
+    }
+  }
+  if (p.phaseCode === 'tx' || p.phaseCode === 'fu' || (p.dtqPos && !p.randomizationDate)) {
+    const ref = p.randomizationDate || p.rvInfectionDate;
+    if (ref) {
+      const d = Math.max(1, diffDays(ref, today) + 1);
+      return `Day ${d}`;
+    }
+  }
+  if (p.studyDay != null) return `Day ${p.studyDay}`;
+  return 'Today';
 }
 
 export type LogEntry = {

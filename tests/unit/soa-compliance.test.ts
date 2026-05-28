@@ -23,7 +23,7 @@ import {
   buildPSBVisitDefs, buildPatientTimeline, getCurrentVisitKey,
   type VisitDef,
 } from '@/lib/timeline';
-import { PATIENTS, addDays, getToday, type Patient } from '@/lib/data';
+import { PATIENTS, addDays, getToday, getTodayPct, getTodayLabel, type Patient } from '@/lib/data';
 
 // ─── Minimal patient factory ──────────────────────────────────────────────────
 
@@ -421,6 +421,141 @@ describe('TRIG — getCurrentVisitKey edge cases', () => {
       });
       expect(getCurrentVisitKey(patient), `offset=${offset}`).toBe('RV_D42');
     }
+  });
+});
+
+// ─── TL-001: getTodayPct timeline marker position ─────────────────────────────
+
+describe('TL-001 — getTodayPct: rescr must not reuse scr formula', () => {
+  const SCR_PCT  = 10.0;
+  const PSB_PCT  = 60.0;
+  const PSB_DAYS = 476; // 68 weeks
+
+  it('TL-001.A: rescr patient at Week 48 (322 days) marker is inside PSB section (>10%, <70%)', () => {
+    const today = getToday();
+    const patient = makePatient({
+      phaseCode: 'rescr',
+      screeningDate: addDays(today, -336),
+      psbStartDate:  addDays(today, -322),
+    });
+    const pct = getTodayPct(patient);
+    // PSB section spans 10%–70%. Week 48 ≈ 50.6%.
+    expect(pct).toBeGreaterThan(SCR_PCT);
+    expect(pct).toBeLessThan(SCR_PCT + PSB_PCT);
+  });
+
+  it('TL-001.B: rescr patient at Week 48 marker ≈ 50.6% (formula check)', () => {
+    const today = getToday();
+    const patient = makePatient({
+      phaseCode: 'rescr',
+      screeningDate: addDays(today, -336),
+      psbStartDate:  addDays(today, -322),
+    });
+    const pct = getTodayPct(patient);
+    const expected = SCR_PCT + (322 / PSB_DAYS) * PSB_PCT;
+    expect(pct).toBeCloseTo(expected, 1);
+  });
+
+  it('TL-001.C: rescr marker is strictly greater than scr marker for same patient', () => {
+    const today = getToday();
+    const base = {
+      screeningDate: addDays(today, -336),
+      psbStartDate:  addDays(today, -322),
+    };
+    const pctRescr = getTodayPct({ ...makePatient(base), phaseCode: 'rescr' });
+    const pctScr   = getTodayPct({ ...makePatient(base), phaseCode: 'scr'   });
+    expect(pctRescr).toBeGreaterThan(pctScr);
+  });
+
+  it('TL-001.D: scr patient on Day 0 returns 0%', () => {
+    const today = getToday();
+    const patient = makePatient({ phaseCode: 'scr', screeningDate: today });
+    expect(getTodayPct(patient)).toBeCloseTo(0, 1);
+  });
+
+  it('TL-001.E: scr patient caps at SCR_PCT=10% regardless of elapsed days', () => {
+    const today = getToday();
+    const patient = makePatient({ phaseCode: 'scr', screeningDate: addDays(today, -500) });
+    expect(getTodayPct(patient)).toBeCloseTo(SCR_PCT, 1);
+  });
+
+  it('TL-001.F: psb and rescr return identical value for same psbStartDate (same formula)', () => {
+    const today = getToday();
+    const base = {
+      screeningDate: addDays(today, -336),
+      psbStartDate:  addDays(today, -322),
+    };
+    const pctPsb   = getTodayPct({ ...makePatient(base), phaseCode: 'psb'   });
+    const pctRescr = getTodayPct({ ...makePatient(base), phaseCode: 'rescr' });
+    expect(pctRescr).toBeCloseTo(pctPsb, 4);
+  });
+
+  it('TL-001.G: FALP-003 (Carmen Vidal) seed patient marker is in PSB section', () => {
+    const falp003 = PATIENTS.find(p => p.id === 'FALP-003');
+    expect(falp003).toBeDefined();
+    const pct = getTodayPct(falp003!);
+    expect(pct).toBeGreaterThan(SCR_PCT);
+    expect(pct).toBeLessThanOrEqual(SCR_PCT + PSB_PCT);
+  });
+});
+
+// ─── TL-002: getTodayLabel — no "Day undefined" ───────────────────────────────
+
+describe('TL-002 — getTodayLabel: never returns "Day undefined"', () => {
+  it('TL-002.A: rescr patient returns "Week N" label, not "Day undefined"', () => {
+    const today = getToday();
+    const patient = makePatient({
+      phaseCode: 'rescr',
+      psbStartDate: addDays(today, -322),
+    });
+    const label = getTodayLabel(patient);
+    expect(label).not.toContain('undefined');
+    expect(label).toMatch(/^Week \d+$/);
+  });
+
+  it('TL-002.B: psb patient returns "Week N"', () => {
+    const today = getToday();
+    const patient = makePatient({
+      phaseCode: 'psb',
+      psbStartDate: addDays(today, -56),
+    });
+    const label = getTodayLabel(patient);
+    expect(label).toMatch(/^Week \d+$/);
+  });
+
+  it('TL-002.C: tx patient returns "Day N"', () => {
+    const today = getToday();
+    const patient = makePatient({
+      phaseCode: 'tx',
+      randomizationDate: addDays(today, -3),
+    });
+    const label = getTodayLabel(patient);
+    expect(label).toMatch(/^Day \d+$/);
+    expect(label).not.toContain('undefined');
+  });
+
+  it('TL-002.D: scr patient returns "Day 1" on screening day', () => {
+    const today = getToday();
+    const patient = makePatient({ phaseCode: 'scr', screeningDate: today });
+    const label = getTodayLabel(patient);
+    expect(label).toBe('Day 1');
+  });
+
+  it('TL-002.E: all PATIENTS seed labels contain no "undefined"', () => {
+    for (const p of PATIENTS) {
+      const label = getTodayLabel(p);
+      expect(label, `Patient ${p.id}`).not.toContain('undefined');
+    }
+  });
+
+  it('TL-002.F: FALP-003 label is "Week 48"', () => {
+    const falp003 = PATIENTS.find(p => p.id === 'FALP-003');
+    expect(falp003).toBeDefined();
+    const label = getTodayLabel(falp003!);
+    // psbStartDate = -322 days → floor(322/7)+1 = 46+1 = 47 → edge; allow ±1 for date rounding
+    const week = parseInt(label.replace('Week ', ''));
+    expect(week).toBeGreaterThanOrEqual(46);
+    expect(week).toBeLessThanOrEqual(48);
   });
 });
 
