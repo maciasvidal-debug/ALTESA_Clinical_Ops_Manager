@@ -1,3 +1,5 @@
+import { getTimelineMarkerPct } from './temporal';
+
 export const getToday = (): Date => {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -20,36 +22,13 @@ export function fmtHuman(d: Date) {
   return `${months[d.getMonth()]} ${d.getDate()}${d.getFullYear() !== today.getFullYear() ? ', ' + d.getFullYear() : ''}`;
 }
 
-export function getTodayPct(p: any) {
-  const SCR_PCT = 10.0;
-  const PSB_PCT = 60.0;
-  const RV_PCT = 2.0;
-  const TX_PCT = 4.6;
-  const FUP_PCT = 23.4;
-  const today = getToday();
-
-  if (p.phaseCode === 'scr' || p.phaseCode === 'rescr') {
-    const days = Math.max(0, diffDays(p.screeningDate, today));
-    return Math.min(SCR_PCT, (days / 42) * SCR_PCT);
-  } 
-  else if (p.phaseCode === 'tx') {
-    const days = Math.max(0, diffDays(p.randomizationDate || p.rvInfectionDate || today, today));
-    return SCR_PCT + PSB_PCT + RV_PCT + Math.min(TX_PCT, (days / 7) * TX_PCT);
-  }
-  else if (p.phaseCode === 'fu') {
-    const days = Math.max(0, diffDays(p.randomizationDate || p.rvInfectionDate || today, today) - 7);
-    return SCR_PCT + PSB_PCT + RV_PCT + TX_PCT + Math.min(FUP_PCT, (days / 35) * FUP_PCT);
-  }
-  else if (p.dtqPos && !p.randomizationDate) {
-    // RV phase
-    return SCR_PCT + PSB_PCT + (RV_PCT / 2);
-  }
-  else if (p.phaseCode === 'psb') {
-    const days = Math.max(0, diffDays(p.psbStartDate || p.screeningDate, today));
-    return SCR_PCT + Math.min(PSB_PCT, (days / 476) * PSB_PCT);
-  }
-  
-  return 100;
+/**
+ * @deprecated Use `getTimelineMarkerPct(patient)` from `lib/temporal.ts`.
+ * Thin shim retained so legacy call sites keep working during migration.
+ * All temporal calculations now live in lib/temporal.ts (single source of truth).
+ */
+export function getTodayPct(p: Patient): number {
+  return getTimelineMarkerPct(p);
 }
 
 export type LogEntry = {
@@ -190,6 +169,12 @@ export type Patient = {
   phase: string;
   phaseCode: string;
   phaseLabel: string;
+  /**
+   * @deprecated Derived field — prefer live computation via
+   * `getStudyDay(patient)` from lib/temporal. Retained as a cached snapshot
+   * for legacy call sites (e.g. test fixtures). May drift over multi-day
+   * sessions; do not rely on it for SoA-correct labels.
+   */
   studyDay?: number;
   loc: string;
   lang: string;

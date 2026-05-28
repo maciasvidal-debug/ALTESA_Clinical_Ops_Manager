@@ -7,10 +7,11 @@ import {
   ChevronRight, ClipboardList, User, Settings as SettingsIcon,
   LayoutGrid, List, Calendar as CalendarIcon, BarChart2,
 } from 'lucide-react';
-import { 
-  type Patient, type Notification, 
-  fmtHuman, fmtISO, getTodayPct, countTasks, getToday 
+import {
+  type Patient, type Notification,
+  fmtHuman, fmtISO, countTasks, getToday
 } from '@/lib/data';
+import { getTimelineMarkerPct, getPSBWeek, getRVDay } from '@/lib/temporal';
 import { DLPWrapper } from '@/components/DLPWrapper';
 
 interface DashboardProps {
@@ -167,12 +168,12 @@ export const Dashboard = ({
                     <div className="mini-tl">
                       <div className="mini-tl-bar">
                         <div className="tl-seg s-scr" title="Screening / Rescreening"><span>SCR</span></div>
-                        <div className="tl-seg s-psb" title="Pre-Symptomatic Baseline (Asymptomatic Phase)"><span className="help-term">{p.phaseCode === 'psb' ? 'PSB W' + Math.floor((p.studyDay || 0) / 7) : 'PSB'}</span></div>
+                        <div className="tl-seg s-psb" title="Pre-Symptomatic Baseline (Asymptomatic Phase)"><span className="help-term">{p.phaseCode === 'psb' ? 'PSB W' + (getPSBWeek(p) ?? 1) : 'PSB'}</span></div>
                         <div className="tl-seg s-rv" title="RV Infection — Randomisation window"></div>
-                        <div className="tl-seg s-tx" title="Treatment Period D1–D7"><span>{p.phaseCode === 'tx' ? 'Tx D' + (p.studyDay || 0) : 'TX'}</span></div>
+                        <div className="tl-seg s-tx" title="Treatment Period D1–D7"><span>{p.phaseCode === 'tx' ? 'Tx D' + (getRVDay(p) ?? 1) : 'TX'}</span></div>
                         <div className="tl-seg s-fu" title="Follow-up Period D8–D42"><span>FUP</span></div>
-                        <div className="tl-now-label" style={{ left: `${getTodayPct(p).toFixed(1)}%` }}>Today</div>
-                        <div className="tl-now-marker" style={{ left: `${getTodayPct(p).toFixed(1)}%` }}></div>
+                        <div className="tl-now-label" style={{ left: `${getTimelineMarkerPct(p).toFixed(1)}%` }}>Today</div>
+                        <div className="tl-now-marker" style={{ left: `${getTimelineMarkerPct(p).toFixed(1)}%` }}></div>
                       </div>
                       <div className="tl-label-row">
                         <div className="tl-lbl" style={{ flex: '0 0 10%' }}>Scr</div>

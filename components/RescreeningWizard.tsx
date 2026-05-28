@@ -3,6 +3,7 @@
 import React from 'react';
 import { X, Check, User, CheckCircle2, Microscope, Calendar, Flag, AlertTriangle } from 'lucide-react';
 import { fmtISO } from '@/lib/data';
+import { getPSBWeek } from '@/lib/temporal';
 
 export const RescreeningWizard = ({ 
   patient, 
@@ -125,7 +126,7 @@ export const RescreeningWizard = ({
             <div className="wz-icon-circle" style={{ background: 'var(--amber-bg)', color: 'var(--amber)' }}><Flag size={20} /></div>
             <div>
               <div className="wz-title">Rescreening Workflow</div>
-              <div className="wz-sub">ALTESA Study · {patient.id} · Week {Math.floor(patient.studyDay / 7)}</div>
+              <div className="wz-sub">ALTESA Study · {patient.id} · PSB Week {getPSBWeek(patient) ?? '—'}</div>
             </div>
           </div>
           <button aria-label="Close" className="wz-close" onClick={onClose}><X size={20} aria-hidden="true" /></button>

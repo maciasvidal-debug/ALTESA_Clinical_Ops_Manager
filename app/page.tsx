@@ -1,11 +1,15 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { 
-  PATIENTS, fmtHuman, fmtISO, getTodayPct, getToday, diffDays, addDays, 
+import {
+  PATIENTS, fmtHuman, fmtISO, getToday, diffDays, addDays,
   GLOSSARY, WZ_STEPS, PROTOCOL_AMENDMENTS, type ProtocolAmendment,
   type Patient, type Notification, type Document, type Task
 } from '@/lib/data';
+import {
+  getTimelineMarkerPct, getStudyDay, getPSBWeek,
+  getRescreeningStatus as getRescreeningStatusTemporal,
+} from '@/lib/temporal';
 import { 
   Bell, ClipboardList, AlertTriangle, Search, Lock, UserPlus, 
   Check, ArrowRight, Delete, X, Info, User, Globe, Mail, Hospital, Clock,
@@ -98,13 +102,17 @@ export default function App() {
         }
         
         const patientsList = await getAllPatients();
-        setPatients(patientsList.map(p => ({ ...p, studyDay: diffDays(p.screeningDate, getToday()) })));
+        // Note: studyDay is now a *derived* value computed live via
+        // getStudyDay(p) from lib/temporal. We seed it once for backward-compat
+        // with code paths that still read p.studyDay, but UI components must
+        // prefer the temporal helpers so the value stays correct across days.
+        setPatients(patientsList.map(p => ({ ...p, studyDay: getStudyDay(p) ?? 0 })));
       } catch {
         // SbD: log operation context only — never log the err object (may expose storage internals).
         console.error('[ALTESA:DB] Storage initialization failed — running in offline fallback mode.');
         // Fall back to reference data so the app remains usable, but surface a visible
         // warning so no coordinator mistakes demo data for live patient records.
-        setPatients(PATIENTS.map(p => ({ ...p, studyDay: diffDays(p.screeningDate, getToday()) })));
+        setPatients(PATIENTS.map(p => ({ ...p, studyDay: getStudyDay(p) ?? 0 })));
         // showToast is a stable useCallback([]) — safe to call from this effect after mount.
         showToast('Local database unavailable. Showing reference data only — reopen the app to retry.', 'warn');
       } finally {
@@ -265,15 +273,10 @@ export default function App() {
 
   const toastIdRef = useRef(0);
 
-  const getRescreeningStatus = (p: Patient) => {
-    if (p.phaseCode !== 'psb') return null;
-    const milestones = [168, 336, 504, 672];
-    const nextMilestone = milestones.find(m => m > (p.studyDay || 0));
-    if (!nextMilestone) return null;
-    const daysToMilestone = nextMilestone - (p.studyDay || 0);
-    if (daysToMilestone <= 28) return { days: daysToMilestone, milestone: nextMilestone / 7 };
-    return null;
-  };
+  // Rescreening milestones are PSB-anchored (Week 48 / 68 of PSB per SoA
+  // Table 2), not screening-anchored. Delegated to lib/temporal so all call
+  // sites share the same calculation.
+  const getRescreeningStatus = (p: Patient) => getRescreeningStatusTemporal(p);
 
   const toggleRescreeningChk = (step: number, i: number) => {
     setRescreeningChks(prev => {
@@ -292,7 +295,7 @@ export default function App() {
       return { 
         ...p, 
         alert: null,
-        labNote: `Rescreening completed on ${fmtISO(getToday())}. Eligibility re-verified for Week ${Math.floor((p.studyDay || 0) / 7)} milestone.`
+        labNote: `Rescreening completed on ${fmtISO(getToday())}. Eligibility re-verified for PSB Week ${getPSBWeek(p) ?? '—'} milestone.`
       };
     }));
     setRescreeningOpen(false);
@@ -311,8 +314,11 @@ export default function App() {
             psbStartDate: psbStartDate,
             phase: 'PSB',
             phaseCode: 'psb',
+            // phaseLabel is a display string only; the SoA-accurate week is
+            // always derived live via getPSBWeek(). Seed studyDay from
+            // screening date so the legacy field stays consistent on day 0.
             phaseLabel: 'Asymptomatic Phase · Week 1',
-            studyDay: 1,
+            studyDay: diffDays(icfDate, getToday()),
             nextVisit: addDays(psbStartDate!, 28),
             nextVisitLabel: 'Monthly call (Day 28)',
             nextVisitWindow: 5,
@@ -1291,7 +1297,7 @@ export default function App() {
   const { done, total } = countTasks(p);
   const pct = total ? Math.round((done / total) * 100) : 0;
   const phBadge = { scr: 'pb-scr', psb: 'pb-psb', rv: 'pb-rv', tx: 'pb-tx', fu: 'pb-fu' }[displayPhaseCode] || 'pb-psb';
-  const nowPct = getTodayPct(p);
+  const nowPct = getTimelineMarkerPct(p);
   const phaseColor = { scr: 'var(--ph-scr)', psb: 'var(--ph-psb)', rv: 'var(--ph-rv)', tx: 'var(--ph-tx)', fu: 'var(--ph-fu)' }[displayPhaseCode] || 'var(--border)';
 
   const milestones = [];
@@ -1677,7 +1683,7 @@ export default function App() {
                   {protocolVersions.find(v => v.id === p.protocolVersion)?.label || `Amendment ${p.protocolVersion}`}
                 </span>
               )}
-              &nbsp;·&nbsp; Study Day <span style={{ fontFamily: 'var(--fm)' }}>{p.studyDay || 0}</span>
+              &nbsp;·&nbsp; Study Day <span style={{ fontFamily: 'var(--fm)' }}>{getStudyDay(p) ?? 0}</span>
               &nbsp;·&nbsp; {p.loc.includes('CLINIC') ? '🏥 Clinic' : '🏠 Home'}
               &nbsp;·&nbsp; <span style={{ fontFamily: 'var(--fm)' }}>{fmtISO(getToday())}</span>
             </div>
