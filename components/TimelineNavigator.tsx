@@ -34,6 +34,7 @@ import {
   type AssessmentResult,
 } from '@/lib/timeline';
 import { type Patient, type LogEntry, fmtISO, addDays } from '@/lib/data';
+import { getStudyDay, getProtocolDayLabel } from '@/lib/temporal';
 
 // ─── Category metadata ────────────────────────────────────────────────────────
 
@@ -559,7 +560,7 @@ export function TimelineNavigator({ patient, onClose }: TimelineNavigatorProps) 
               Protocol Timeline Navigator
             </div>
             <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>
-              {patient.id} · {patient.phaseLabel} · Study Day {patient.studyDay ?? '—'} · {pastCount} completed · {futureCount} upcoming
+              {patient.id} · {patient.phaseLabel} · Study Day {getStudyDay(patient) ?? '—'} · {getProtocolDayLabel(patient)} · {pastCount} completed · {futureCount} upcoming
             </div>
           </div>
 
