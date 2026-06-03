@@ -428,16 +428,19 @@ abbr[title] { text-decoration: underline dotted var(--border2); cursor: help; te
 
 /* ─── MODAL ─── */
 .modal-overlay { position: fixed; inset: 0; background: rgba(13,17,23,.75); backdrop-filter: blur(8px); z-index: 600; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 200ms var(--ease); }
-.modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r4); max-width: 440px; width: 100%; box-shadow: 0 32px 64px rgba(0,0,0,.25); animation: slideUp 250ms var(--ease); overflow: hidden; }
-.modal-hdr { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--bg); }
+.modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r4); max-width: 440px; width: 100%; box-shadow: 0 32px 64px rgba(0,0,0,.25); animation: slideUp 250ms var(--ease); overflow: hidden; display: flex; flex-direction: column; max-height: calc(100vh - 40px); }
+/* A <form> may wrap the body + footer (e.g. Add Patient): let it carry the
+   column layout so the body scrolls while the footer stays pinned. */
+.modal-card > form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.modal-hdr { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--bg); flex-shrink: 0; }
 .modal-title { font-family: var(--fd); font-size: 20px; color: var(--t1); letter-spacing: -0.01em; }
-.modal-body { padding: 24px; }
+.modal-body { padding: 24px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 .modal-input { width: 100%; padding: 12px 16px; border-radius: var(--r2); border: 1px solid var(--border); background: var(--bg); color: var(--t1); font-family: var(--fu); font-size: 14px; outline: none; transition: all 150ms var(--ease); min-height: 48px; }
 .modal-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-bg); }
 .modal-label { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; margin-bottom: 8px; color: var(--t2); text-transform: uppercase; letter-spacing: .08em; }
 .modal-help { font-size: 12px; color: var(--t3); margin-top: 8px; line-height: 1.5; display: flex; align-items: flex-start; gap: 6px; }
 .modal-help svg { flex-shrink: 0; margin-top: 2px; }
-.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; background: var(--bg); }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; background: var(--bg); flex-shrink: 0; }
 
 /* ─── CONFIRM DIALOG ─── */
 .confirm-overlay { position: fixed; inset: 0; background: rgba(13,17,23,.75); backdrop-filter: blur(6px); z-index: 600; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 150ms var(--ease); }

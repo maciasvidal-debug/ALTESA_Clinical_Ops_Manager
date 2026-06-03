@@ -329,7 +329,7 @@ export const PATIENTS: Patient[] = [
     },
     ers: [6, 5, 7, 6, 5, 6, 7, 5, 4, 6, 7, 6, 5, 6, 7, 8, 6, 5, 6, 7, 6, 5, 4, 6, 7, 6, 5, 6, 7, 6],
     psb: 5.8, psbRecords: 156,
-    nextVisit: addDays(getToday(), 112), nextVisitLabel: 'Rescreening Clinic (Week 48)',
+    nextVisit: addDays(getToday(), 139), nextVisitLabel: 'Rescreening Clinic (Week 52)',
     nextVisitWindow: 7,
     documents: []
   },
@@ -405,9 +405,10 @@ export const PATIENTS: Patient[] = [
   },
   {
     id: 'CUN-058', siteId: 'CUN', name: 'Linda Thompson', phase: 'PSB', phaseCode: 'psb',
-    phaseLabel: 'Asymptomatic Phase · Week 65',
+    phaseLabel: 'Asymptomatic Phase · Week 50',
     loc: 'HOME', lang: 'English', alert: 'RESCREENING',
-    screeningDate: addDays(getToday(), -469), psbStartDate: addDays(getToday(), -455),
+    // PSB Day 350 (~Week 50) → 14 days before the 12-month rescreening (Week 52).
+    screeningDate: addDays(getToday(), -363), psbStartDate: addDays(getToday(), -349),
     tasks: {
       q: [
         { code: 'DTQ', label: 'Daily Trigger Questionnaire', icon: '🔔', done: true, note: 'Answer: NO' },
@@ -417,13 +418,13 @@ export const PATIENTS: Patient[] = [
       ],
       pr: [], l: [],
       ad: [
-        { code: 'MC', label: 'Monthly Call', icon: '📞', done: true, note: 'Week 65 call completed', subcat: 'fup' },
+        { code: 'MC', label: 'Monthly Call', icon: '📞', done: true, note: 'Week 50 call completed', subcat: 'fup' },
         { code: 'CMED', label: 'Concomitant Medications', icon: '💊', done: true, subcat: 'fup' },
       ]
     },
     ers: [4, 3, 5, 4, 3, 4, 5, 4, 3, 4, 5, 4, 3, 4, 5, 3, 4, 5, 4, 3, 4, 5, 4, 3, 4, 5, 4, 3, 4, 4],
-    psb: 3.8, psbRecords: 315,
-    nextVisit: addDays(getToday(), 21), nextVisitLabel: 'Rescreening Clinic (Week 68)',
+    psb: 3.8, psbRecords: 348,
+    nextVisit: addDays(getToday(), 14), nextVisitLabel: 'Rescreening Clinic (Week 52)',
     nextVisitWindow: 7,
     documents: [
       { id: 'd8', name: 'Informed Consent v1.0', category: 'ICF', extension: 'PDF', uploadDate: addDays(getToday(), -469), url: '#', size: '1.1 MB', critical: true },

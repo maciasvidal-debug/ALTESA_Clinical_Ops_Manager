@@ -323,18 +323,19 @@ describe('TIMELINE-MARKER — marker position must land in the correct phase seg
 
 // ─── Rescreening milestone alert ──────────────────────────────────────────────
 
-describe('TIMELINE-RESCR — rescreening alerts fire on PSB-anchored milestones', () => {
+describe('TIMELINE-RESCR — rescreening alerts fire every 6 months (SoA: "Every 6 Months")', () => {
   const today = getToday();
 
-  it('PSB Day 308 (4 weeks before Week 48 milestone) → alert with 28 days', () => {
+  it('4 weeks before the first 6-month milestone (Week 26) → alert with 28 days', () => {
+    // PSB Day 154 → 28 days before Day 182 (Week 26).
     const p = makePatient({
       phaseCode: 'psb',
-      psbStartDate: addDays(today, -307),
-      screeningDate: addDays(today, -321),
+      psbStartDate: addDays(today, -153),
+      screeningDate: addDays(today, -167),
     });
     const status = getRescreeningStatus(p);
     expect(status).not.toBeNull();
-    expect(status!.milestone).toBe(48);
+    expect(status!.milestone).toBe(26);
     expect(status!.days).toBe(28);
   });
 
@@ -351,15 +352,28 @@ describe('TIMELINE-RESCR — rescreening alerts fire on PSB-anchored milestones'
     expect(getRescreeningStatus(p)).toBeNull();
   });
 
-  it('Two weeks before Week 68 milestone → alert with 14 days', () => {
+  it('Two weeks before the 12-month milestone (Week 52) → alert with 14 days', () => {
+    // PSB Day 350 → 14 days before Day 364 (Week 52).
     const p = makePatient({
       phaseCode: 'psb',
-      psbStartDate: addDays(today, -461), // PSB Day 462 → 14 days before Day 476 (W68)
+      psbStartDate: addDays(today, -349),
     });
     const status = getRescreeningStatus(p);
     expect(status).not.toBeNull();
-    expect(status!.milestone).toBe(68);
+    expect(status!.milestone).toBe(52);
     expect(status!.days).toBe(14);
+  });
+
+  it('Recurs at the 18-month milestone (Week 78) → alert fires again', () => {
+    // PSB Day 540 → 6 days before Day 546 (Week 78).
+    const p = makePatient({
+      phaseCode: 'psb',
+      psbStartDate: addDays(today, -539),
+    });
+    const status = getRescreeningStatus(p);
+    expect(status).not.toBeNull();
+    expect(status!.milestone).toBe(78);
+    expect(status!.days).toBe(6);
   });
 });
 
