@@ -210,34 +210,44 @@ export function getTimelineMarkerPct(patient: Patient, today: Date = getToday())
 }
 
 // ─── Rescreening milestones (PSB-anchored) ────────────────────────────────────
-// SoA Table 2: Rescreening is required at Week 48 and Week 68 of PSB.
-// Historically computed off `studyDay` (screening-anchored), which silently
-// skewed the warning window by ~2 weeks.
+// SoA Table 2 — Screening/Rescreening column: "Rescreening (Every 6 Months)".
+// Rescreening therefore RECURS every 6 months throughout the Asymptomatic Phase
+// (PSB), not at two fixed weeks. We anchor on psbStartDate (the SoA-correct PSB
+// anchor) rather than the screening date, so the warning window doesn't drift by
+// the length of the screening period.
+//
+// 6 months ≈ 26 weeks. Milestones fall at PSB Day 182, 364, 546 … (Weeks 26, 52,
+// 78 …) and the alert opens 28 days ahead of each one.
+export const RESCREENING_INTERVAL_WEEKS = 26;
+const RESCREENING_INTERVAL_DAYS = RESCREENING_INTERVAL_WEEKS * 7; // 182
 
-export const RESCREENING_PSB_WEEKS = [48, 68] as const;
+/** Days ahead of a rescreening milestone that the alert window opens. */
+export const RESCREENING_WINDOW_DAYS = 28;
 
 export type RescreeningStatus = {
   /** Days until the next rescreening milestone (PSB-anchored). */
   days: number;
-  /** PSB week of the milestone (48 or 68). */
+  /** PSB week of the milestone (26, 52, 78 …). */
   milestone: number;
 };
 
 /**
- * Returns a rescreening alert when a PSB patient is within 28 days of a
- * scheduled rescreening week. Returns null otherwise.
+ * Returns a rescreening alert when a PSB patient is within
+ * RESCREENING_WINDOW_DAYS of their next 6-month rescreening milestone.
+ * Returns null otherwise.
  */
 export function getRescreeningStatus(patient: Patient, today: Date = getToday()): RescreeningStatus | null {
   if (patient.phaseCode !== 'psb') return null;
   const psbDay = getPSBDay(patient, today);
-  if (psbDay == null) return null;
+  if (psbDay == null || psbDay < 1) return null;
 
-  for (const week of RESCREENING_PSB_WEEKS) {
-    const milestoneDay = week * 7; // PSB Day for that week boundary
-    const remaining = milestoneDay - psbDay;
-    if (remaining > 0 && remaining <= 28) {
-      return { days: remaining, milestone: week };
-    }
+  // PSB Day of the next 6-month milestone at or after the current PSB day.
+  const nextIndex = Math.max(1, Math.ceil(psbDay / RESCREENING_INTERVAL_DAYS));
+  const milestoneDay = nextIndex * RESCREENING_INTERVAL_DAYS;
+  const remaining = milestoneDay - psbDay;
+
+  if (remaining > 0 && remaining <= RESCREENING_WINDOW_DAYS) {
+    return { days: remaining, milestone: milestoneDay / 7 };
   }
   return null;
 }
