@@ -41,7 +41,15 @@ import type { Patient } from './data';
 
 // ── Type Taxonomy ─────────────────────────────────────────────────────────────
 
-export type OperationsKind = 'interaction' | 'referral' | 'compliance' | 'dropout';
+export type OperationsKind = 'interaction' | 'referral' | 'compliance' | 'dropout' | 'trigger';
+
+/**
+ * Protocol randomisation window: symptom onset → clinic within 48 h, plus a 6 h
+ * operational grace (see WZ_STEPS "48 h + 6 h randomisation window"). A
+ * trigger→visit gap beyond this is a window breach the manager should see —
+ * something the spreadsheet's bare AVERAGE never surfaced.
+ */
+export const RANDOMIZATION_WINDOW_HOURS = 54;
 
 export type InteractionChannel = 'call' | 'text' | 'email' | 'other';
 export type InteractionDirection = 'outbound' | 'inbound';
@@ -132,11 +140,30 @@ export type DropoutEvent = {
   reason?: string;           // PII-filtered
 };
 
+/**
+ * An ePRO symptom trigger and its resulting office visit (spreadsheet:
+ * Patient_Triggers_Log). The workbook stored the trigger→visit gap as a
+ * hand-typed number (F2 was a literal `1`); here it is COMPUTED from the two
+ * timestamps via `hoursBetween`, so it can never drift from the source data.
+ * `officeVisitAt` undefined ⇒ the patient has triggered but not yet attended.
+ */
+export type TriggerEvent = {
+  id: string;
+  kind: 'trigger';
+  siteId: string;
+  patientId: string;
+  userId: string;
+  timestamp: string;
+  triggerAt: string;         // ISO datetime — DTQ-positive / symptom onset
+  officeVisitAt?: string;    // ISO datetime — clinic attendance; open if absent
+};
+
 export type OperationsRecord =
   | PatientInteraction
   | ReferralIntake
   | ComplianceEvent
-  | DropoutEvent;
+  | DropoutEvent
+  | TriggerEvent;
 
 // ── Labels ──────────────────────────────────────────────────────────────────
 
@@ -373,6 +400,34 @@ export async function submitDropoutEvent(input: DropoutInput): Promise<DropoutEv
   return rec;
 }
 
+export type TriggerInput = {
+  siteId: string;
+  patientId: string;
+  triggerAt: string;
+  officeVisitAt?: string;
+};
+
+export async function submitTriggerEvent(input: TriggerInput): Promise<TriggerEvent> {
+  if (!input.siteId || !input.patientId) throw new Error('siteId and patientId are required.');
+  if (!input.triggerAt) throw new Error('triggerAt is required.');
+  if (input.officeVisitAt && new Date(input.officeVisitAt).getTime() < new Date(input.triggerAt).getTime()) {
+    throw new Error('officeVisitAt cannot precede triggerAt.');
+  }
+  const rec: TriggerEvent = {
+    id: genId(),
+    kind: 'trigger',
+    siteId: input.siteId,
+    patientId: input.patientId,
+    userId: _userId,
+    timestamp: nowISO(),
+    triggerAt: input.triggerAt,
+    ...(input.officeVisitAt && { officeVisitAt: input.officeVisitAt }),
+  };
+  const { appendOperationsRecord } = await import('@/lib/db');
+  await appendOperationsRecord(rec);
+  return rec;
+}
+
 // ── Public API — Aggregation (the guarded roll-up) ───────────────────────────
 
 export type OperationsSummary = {
@@ -410,6 +465,14 @@ export type OperationsSummary = {
   // — Retention —
   dropouts: number;
   dropoutsPrevented: number;
+
+  // — Symptom trigger → office visit —
+  triggerCount: number;
+  triggersPendingVisit: number;
+  /** Mean hours from ePRO trigger to office visit — null-guarded, computed not typed. */
+  avgTriggerToVisitHours: number | null;
+  /** Attended visits whose gap exceeded RANDOMIZATION_WINDOW_HOURS. */
+  triggerWindowBreaches: number;
 };
 
 /** Guarded mean: returns null on an empty sample instead of NaN / #DIV/0!. */
@@ -468,6 +531,9 @@ export function summariseOperations(
 
   let dropouts = 0, dropoutsPrevented = 0;
 
+  let triggerCount = 0, triggersPendingVisit = 0, triggerWindowBreaches = 0;
+  const triggerToVisitHours: number[] = [];
+
   for (const r of scoped) {
     switch (r.kind) {
       case 'interaction': {
@@ -506,6 +572,19 @@ export function summariseOperations(
         else if (r.preventionAction) dropoutsPrevented++;
         break;
       }
+      case 'trigger': {
+        triggerCount++;
+        if (!r.officeVisitAt) {
+          triggersPendingVisit++;
+        } else {
+          const hrs = hoursBetween(r.triggerAt, r.officeVisitAt);
+          if (hrs != null) {
+            triggerToVisitHours.push(hrs);
+            if (hrs > RANDOMIZATION_WINDOW_HOURS) triggerWindowBreaches++;
+          }
+        }
+        break;
+      }
     }
   }
 
@@ -537,6 +616,11 @@ export function summariseOperations(
 
     dropouts,
     dropoutsPrevented,
+
+    triggerCount,
+    triggersPendingVisit,
+    avgTriggerToVisitHours: safeAverage(triggerToVisitHours),
+    triggerWindowBreaches,
   };
 }
 

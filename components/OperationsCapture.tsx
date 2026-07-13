@@ -28,10 +28,13 @@ import {
   submitReferralIntake,
   submitComplianceEvent,
   submitDropoutEvent,
+  submitTriggerEvent,
   setOperationsUser,
+  hoursBetween,
+  RANDOMIZATION_WINDOW_HOURS,
 } from '@/lib/operations';
 
-type Tab = 'interaction' | 'referral' | 'compliance' | 'dropout';
+type Tab = 'interaction' | 'referral' | 'compliance' | 'dropout' | 'trigger';
 
 interface OperationsCaptureProps {
   onClose: () => void;
@@ -42,6 +45,7 @@ interface OperationsCaptureProps {
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'interaction', label: 'Interaction' },
+  { id: 'trigger', label: 'Trigger' },
   { id: 'referral', label: 'Referral' },
   { id: 'compliance', label: 'Compliance' },
   { id: 'dropout', label: 'Dropout' },
@@ -96,6 +100,11 @@ export function OperationsCapture({ onClose, patients, userId, defaultPatientId 
   const [cFellOut, setCFellOut] = useState<string>(todayISO());
   const [cReturned, setCReturned] = useState<string>('');
   const [cReason, setCReason] = useState('');
+
+  // ── Trigger form ──────────────────────────────────────────────────────────
+  const [tPatient, setTPatient] = useState<string>(defaultPatientId ?? '');
+  const [tTrigger, setTTrigger] = useState<string>('');
+  const [tVisit, setTVisit] = useState<string>('');
 
   // ── Dropout form ──────────────────────────────────────────────────────────
   const [dPatient, setDPatient] = useState<string>(defaultPatientId ?? '');
@@ -158,6 +167,16 @@ export function OperationsCapture({ onClose, patients, userId, defaultPatientId 
           reason: cReason || undefined,
         });
         setCReturned(''); setCReason('');
+      } else if (tab === 'trigger') {
+        if (!tPatient) throw new Error('Select a patient.');
+        if (!tTrigger) throw new Error('Enter the trigger date & time.');
+        await submitTriggerEvent({
+          siteId: patientSite(tPatient),
+          patientId: tPatient,
+          triggerAt: tTrigger,
+          officeVisitAt: tVisit || undefined,
+        });
+        setTTrigger(''); setTVisit('');
       } else {
         if (!dPatient) throw new Error('Select a patient.');
         if (!dIntent && !dDropout) throw new Error('Enter an intent date or a dropout date.');
@@ -306,6 +325,28 @@ export function OperationsCapture({ onClose, patients, userId, defaultPatientId 
               </>
             )}
 
+            {tab === 'trigger' && (
+              <>
+                <Field label="Patient">
+                  <select className="modal-input" value={tPatient} onChange={(e) => setTPatient(e.target.value)}>
+                    {patientOptions(true, 'Select patient…')}
+                  </select>
+                </Field>
+                <Row>
+                  <Field label="ePRO trigger (symptom onset)">
+                    <input type="datetime-local" className="modal-input" value={tTrigger}
+                      onChange={(e) => setTTrigger(e.target.value)} />
+                  </Field>
+                  <Field label="Office visit (optional)">
+                    <input type="datetime-local" className="modal-input" value={tVisit}
+                      onChange={(e) => setTVisit(e.target.value)} />
+                  </Field>
+                </Row>
+                <TriggerPreview triggerAt={tTrigger} visitAt={tVisit} />
+                <Hint>Hours are computed from the two timestamps — no manual math. Leave the visit empty until the patient attends.</Hint>
+              </>
+            )}
+
             {tab === 'compliance' && (
               <>
                 <Field label="Patient">
@@ -429,4 +470,34 @@ function NumInput({ value, onChange }: { value: string; onChange: (v: string) =>
 
 function Hint({ children }: { children: React.ReactNode }) {
   return <p style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '-4px', lineHeight: 1.5 }}>{children}</p>;
+}
+
+function TriggerPreview({ triggerAt, visitAt }: { triggerAt: string; visitAt: string }) {
+  if (!triggerAt || !visitAt) return null;
+  const hrs = hoursBetween(triggerAt, visitAt);
+  if (hrs == null) return null;
+  if (hrs < 0) {
+    return (
+      <div style={{ marginBottom: '16px', padding: '8px 12px', borderRadius: 'var(--r1)',
+        fontSize: '12px', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-mid)' }}>
+        Office visit is before the trigger — check the timestamps.
+      </div>
+    );
+  }
+  const breached = hrs > RANDOMIZATION_WINDOW_HOURS;
+  const rounded = hrs < 10 ? hrs.toFixed(1) : Math.round(hrs);
+  return (
+    <div style={{
+      marginBottom: '16px', padding: '8px 12px', borderRadius: 'var(--r1)', fontSize: '12px',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px',
+      background: breached ? 'var(--amber-bg, #FEF3C7)' : 'var(--blue-bg)',
+      color: breached ? '#92400E' : 'var(--blue)',
+      border: `1px solid ${breached ? '#FDE68A' : 'var(--blue-mid, var(--border))'}`,
+    }}>
+      <span><strong>{rounded} h</strong> from trigger to visit</span>
+      <span style={{ fontWeight: 700, fontSize: '11px' }}>
+        {breached ? `⚠ Beyond ${RANDOMIZATION_WINDOW_HOURS} h window` : `Within ${RANDOMIZATION_WINDOW_HOURS} h window`}
+      </span>
+    </div>
+  );
 }

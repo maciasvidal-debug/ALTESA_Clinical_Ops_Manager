@@ -18,7 +18,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Activity, Phone, MessageSquare, Mail, Users, TrendingDown,
-  UserCheck, RefreshCw, Loader, Globe, Database,
+  UserCheck, RefreshCw, Loader, Globe, Database, Timer, Clock, AlertTriangle,
 } from 'lucide-react';
 import type { Patient } from '@/lib/data';
 import { getSiteId } from '@/lib/data';
@@ -28,6 +28,7 @@ import {
   deriveStatusCounts,
   sitesInRecords,
   STATUS_LABELS,
+  RANDOMIZATION_WINDOW_HOURS,
 } from '@/lib/operations';
 
 type RangePreset = 'all' | '7d' | '30d' | 'month';
@@ -211,6 +212,24 @@ export function OperationsDashboard({ patients }: OperationsDashboardProps) {
           />
           <Kpi icon={<Globe size={16} className="text-cyan-500" />} label="From website" value={fmtNum(summary.recruitedWebsite)} />
           <Kpi icon={<Database size={16} className="text-violet-500" />} label="From database" value={fmtNum(summary.recruitedDatabase)} />
+        </div>
+      </Section>
+
+      {/* Symptom trigger → office visit — operational */}
+      <Section title="Symptom Trigger → Visit" subtitle={`Hours computed from timestamps · ${RANDOMIZATION_WINDOW_HOURS}h randomisation window`}>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Kpi
+            icon={<Timer size={16} className="text-blue-500" />}
+            label="Avg trigger→visit"
+            value={summary.avgTriggerToVisitHours == null ? '—' : `${fmtNum(summary.avgTriggerToVisitHours, 1)}h`}
+          />
+          <Kpi icon={<Activity size={16} className="text-violet-500" />} label="Triggers" value={String(summary.triggerCount)} />
+          <Kpi icon={<Clock size={16} className="text-amber-500" />} label="Awaiting visit" value={String(summary.triggersPendingVisit)} />
+          <Kpi
+            icon={<AlertTriangle size={16} className={summary.triggerWindowBreaches > 0 ? 'text-rose-500' : 'text-neutral-400'} />}
+            label="Window breaches"
+            value={String(summary.triggerWindowBreaches)}
+          />
         </div>
       </Section>
 

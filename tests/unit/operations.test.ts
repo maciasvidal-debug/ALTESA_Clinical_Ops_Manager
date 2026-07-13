@@ -27,13 +27,16 @@ import {
   safeAverage,
   safeRatio,
   daysBetween,
+  hoursBetween,
   submitInteraction,
   setOperationsUser,
+  RANDOMIZATION_WINDOW_HOURS,
   type OperationsRecord,
   type PatientInteraction,
   type ReferralIntake,
   type ComplianceEvent,
   type DropoutEvent,
+  type TriggerEvent,
 } from '@/lib/operations';
 import type { Patient } from '@/lib/data';
 import { FakeStore } from '../__helpers__/FakeStore';
@@ -72,6 +75,13 @@ function dropout(o: Partial<DropoutEvent> = {}): DropoutEvent {
     id: uid(), kind: 'dropout', siteId: '130', userId: 'u',
     timestamp: `${TODAY}T10:00:00.000Z`, patientId: 'P1',
     ...o,
+  };
+}
+function trigger(o: Partial<TriggerEvent> = {}): TriggerEvent {
+  return {
+    id: uid(), kind: 'trigger', siteId: '130', userId: 'u',
+    timestamp: `${TODAY}T10:00:00.000Z`, patientId: 'P1',
+    triggerAt: '2026-06-01T08:00:00', ...o,
   };
 }
 function patient(o: Partial<Patient> = {}): Patient {
@@ -226,6 +236,51 @@ describe('OPS-007 — dropout vs prevented retention', () => {
     ]);
     expect(s.dropouts).toBe(1);
     expect(s.dropoutsPrevented).toBe(1);
+  });
+});
+
+// ── OPS-011: trigger → office visit (hours, computed not typed) ──────────────
+
+describe('OPS-011 — symptom trigger → office visit', () => {
+  it('OPS-011.1 — avg hours is computed from the two timestamps', () => {
+    const s = summariseOperations([
+      trigger({ triggerAt: '2026-06-01T08:00:00', officeVisitAt: '2026-06-01T20:00:00' }), // 12h
+      trigger({ triggerAt: '2026-06-02T08:00:00', officeVisitAt: '2026-06-02T14:00:00' }), // 6h
+    ]);
+    expect(s.triggerCount).toBe(2);
+    expect(s.avgTriggerToVisitHours).toBe(9);
+    expect(s.triggersPendingVisit).toBe(0);
+    expect(s.triggerWindowBreaches).toBe(0);
+  });
+
+  it('OPS-011.2 — a trigger without a visit is pending and excluded from the average', () => {
+    const s = summariseOperations([
+      trigger({ triggerAt: '2026-06-01T08:00:00', officeVisitAt: '2026-06-01T18:00:00' }), // 10h
+      trigger({ triggerAt: '2026-06-03T08:00:00' }), // pending
+    ]);
+    expect(s.triggerCount).toBe(2);
+    expect(s.triggersPendingVisit).toBe(1);
+    expect(s.avgTriggerToVisitHours).toBe(10); // pending one does not skew the mean
+  });
+
+  it('OPS-011.3 — a gap beyond the randomisation window is flagged as a breach', () => {
+    const overBy = RANDOMIZATION_WINDOW_HOURS + 10;
+    const start = new Date('2026-06-01T00:00:00');
+    const end = new Date(start.getTime() + overBy * 3_600_000);
+    const s = summariseOperations([
+      trigger({ triggerAt: start.toISOString(), officeVisitAt: end.toISOString() }),
+    ]);
+    expect(s.triggerWindowBreaches).toBe(1);
+  });
+
+  it('OPS-011.4 — empty set yields null avg, not #DIV/0!', () => {
+    expect(summariseOperations([]).avgTriggerToVisitHours).toBeNull();
+    expect(summariseOperations([]).triggerCount).toBe(0);
+  });
+
+  it('OPS-011.5 — hoursBetween computes and rejects bad input', () => {
+    expect(hoursBetween('2026-06-01T00:00:00', '2026-06-01T06:00:00')).toBe(6);
+    expect(hoursBetween('nonsense', '2026-06-01T06:00:00')).toBeNull();
   });
 });
 
