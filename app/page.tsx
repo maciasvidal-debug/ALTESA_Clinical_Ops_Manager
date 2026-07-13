@@ -17,7 +17,7 @@ import {
   ChevronDown, Plus, FileEdit, ArrowLeft, Circle, FileText, BarChart2,
   CheckCircle2, CheckCircle, Calendar, Flag, Microscope, Home, Wind, Pill, MessageSquare,
   Stethoscope, Droplet, Bug, TestTubes, FlaskConical, Beaker, GraduationCap, Heart, BadgeCheck,
-  CalendarDays
+  CalendarDays, Users
 } from 'lucide-react';
 
 // Components
@@ -42,6 +42,7 @@ import { RescreeningWizard } from '@/components/RescreeningWizard';
 import { DLPWrapper } from '@/components/DLPWrapper';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { WorkloadLogger } from '@/components/WorkloadLogger';
+import { OperationsCapture } from '@/components/OperationsCapture';
 import { StatsScreen } from '@/components/StatsScreen';
 import { TimelineNavigator } from '@/components/TimelineNavigator';
 import { checkTaskCompletion } from '@/lib/task-utils';
@@ -196,6 +197,7 @@ export default function App() {
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
   const [workloadLogOpen, setWorkloadLogOpen] = useState(false);
+  const [opsCaptureOpen, setOpsCaptureOpen] = useState(false);
 
   // Manager State
   const [reviewedTasks, setReviewedTasks] = useState<Set<string>>(new Set());
@@ -1248,21 +1250,40 @@ export default function App() {
           />
         )}
 
-        {/* Workload Logger FAB */}
-        <button
-          onClick={() => { setWorkloadLogOpen(true); trackEvent('modal_opened', { modal: 'workload_logger' }); }}
-          aria-label="Log off-platform time"
-          title="Log off-platform time"
-          className="fixed bottom-5 right-5 z-40 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-medium px-3.5 py-2.5 rounded-full shadow-lg transition-all hover:shadow-xl"
-        >
-          <Clock size={14} />
-          Log Time
-        </button>
+        {/* Operational-capture + Workload FABs */}
+        <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-2">
+          <button
+            onClick={() => { setOpsCaptureOpen(true); trackEvent('modal_opened', { modal: 'operations_capture' }); }}
+            aria-label="Capture operational data"
+            title="Capture operational data (interactions, referrals, compliance, dropout)"
+            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 active:bg-black text-white text-xs font-medium px-3.5 py-2.5 rounded-full shadow-lg transition-all hover:shadow-xl"
+          >
+            <Users size={14} />
+            Capture Ops
+          </button>
+          <button
+            onClick={() => { setWorkloadLogOpen(true); trackEvent('modal_opened', { modal: 'workload_logger' }); }}
+            aria-label="Log off-platform time"
+            title="Log off-platform time"
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-medium px-3.5 py-2.5 rounded-full shadow-lg transition-all hover:shadow-xl"
+          >
+            <Clock size={14} />
+            Log Time
+          </button>
+        </div>
 
         {workloadLogOpen && (
           <WorkloadLogger
             userId="local_user"
             onClose={() => { setWorkloadLogOpen(false); trackEvent('modal_closed', { modal: 'workload_logger' }); }}
+          />
+        )}
+
+        {opsCaptureOpen && (
+          <OperationsCapture
+            userId="local_user"
+            patients={patients}
+            onClose={() => { setOpsCaptureOpen(false); trackEvent('modal_closed', { modal: 'operations_capture' }); }}
           />
         )}
 
