@@ -18,7 +18,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Activity, Phone, MessageSquare, Mail, Users, TrendingDown,
-  UserCheck, RefreshCw, Loader, Globe, Database, Timer, Clock, AlertTriangle,
+  UserCheck, RefreshCw, Loader, Globe, Database, Timer, Clock, AlertTriangle, Download,
 } from 'lucide-react';
 import type { Patient } from '@/lib/data';
 import { getSiteId } from '@/lib/data';
@@ -27,6 +27,7 @@ import {
   summariseOperations,
   deriveStatusCounts,
   sitesInRecords,
+  operationsSummaryToCsv,
   STATUS_LABELS,
   RANDOMIZATION_WINDOW_HOURS,
 } from '@/lib/operations';
@@ -95,6 +96,23 @@ export function OperationsDashboard({ patients }: OperationsDashboardProps) {
     return [...s].filter(Boolean).sort();
   }, [records, patients]);
 
+  // Export the KPIs as CSV — one row per scope (ALL + each site) for the current
+  // date range. This is the loop-closing replacement for "email the spreadsheet".
+  const exportCsv = useCallback(() => {
+    const { from: f, to: t } = rangeToDates(preset);
+    const exportScopes = ['ALL', ...sites];
+    const csv = operationsSummaryToCsv(records, exportScopes, { from: f, to: t });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ALTESA_Operational_KPIs_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [records, sites, preset]);
+
   const { from, to } = rangeToDates(preset);
   const summary = useMemo(
     () => summariseOperations(records, { scope, from, to }),
@@ -152,6 +170,15 @@ export function OperationsDashboard({ patients }: OperationsDashboardProps) {
               <option key={k} value={k}>{RANGE_LABELS[k]}</option>
             ))}
           </select>
+          <button
+            onClick={exportCsv}
+            disabled={empty}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 text-xs text-neutral-600 dark:text-neutral-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label="Export operational KPIs as CSV"
+            title="Export operational KPIs as CSV"
+          >
+            <Download size={13} /> CSV
+          </button>
           <button
             onClick={() => load(true)}
             disabled={refreshing}

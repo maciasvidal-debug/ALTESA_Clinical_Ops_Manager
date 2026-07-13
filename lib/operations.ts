@@ -628,3 +628,77 @@ export function summariseOperations(
 export function sitesInRecords(records: OperationsRecord[]): string[] {
   return [...new Set(records.map((r) => r.siteId))].sort();
 }
+
+// ── Public API — Export (spreadsheet-shaped report) ──────────────────────────
+
+/**
+ * Column order for the operational-KPI export. Ordered by audience so the
+ * manager can hand the same file up the chain the spreadsheet used to serve.
+ */
+const CSV_COLUMNS: { key: keyof OperationsSummary; header: string }[] = [
+  { key: 'scope', header: 'Scope' },
+  { key: 'from', header: 'From' },
+  { key: 'to', header: 'To' },
+  // Effort (billing-facing)
+  { key: 'calls', header: 'Calls' },
+  { key: 'texts', header: 'Texts' },
+  { key: 'emails', header: 'Emails' },
+  { key: 'otherContacts', header: 'Other contacts' },
+  { key: 'totalInteractions', header: 'Total interactions' },
+  { key: 'totalEffortMinutes', header: 'Effort minutes' },
+  { key: 'inboundCount', header: 'Inbound contacts' },
+  { key: 'avgResponseMinutes', header: 'Avg response (min)' },
+  // Recruitment funnel
+  { key: 'referralsReviewed', header: 'Referrals reviewed' },
+  { key: 'referralsMeet', header: 'Referrals meet criteria' },
+  { key: 'referralsNotMeet', header: 'Referrals do not meet' },
+  { key: 'meetRatio', header: 'Meet ratio' },
+  { key: 'recruitedWebsite', header: 'Recruited (website)' },
+  { key: 'recruitedDatabase', header: 'Recruited (database)' },
+  { key: 'avgReferralResponseDays', header: 'Avg referral response (days)' },
+  // Trigger → visit
+  { key: 'triggerCount', header: 'Triggers' },
+  { key: 'triggersPendingVisit', header: 'Triggers awaiting visit' },
+  { key: 'avgTriggerToVisitHours', header: 'Avg trigger→visit (h)' },
+  { key: 'triggerWindowBreaches', header: 'Window breaches' },
+  // Compliance & retention
+  { key: 'patientsCurrentlyNonCompliant', header: 'Currently non-compliant' },
+  { key: 'avgDaysOutOfCompliance', header: 'Avg days out of compliance' },
+  { key: 'dropouts', header: 'Dropouts' },
+  { key: 'dropoutsPrevented', header: 'Dropouts prevented' },
+];
+
+/** RFC-4180 field escaping: quote when the value contains a comma, quote or newline. */
+function csvEscape(value: string): string {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+/** Renders one summary field to a CSV cell. null → empty (no #DIV/0!, no "NaN"). */
+function csvCell(value: OperationsSummary[keyof OperationsSummary]): string {
+  if (value == null) return '';
+  if (Array.isArray(value)) return csvEscape(value.join(' '));
+  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  return csvEscape(String(value));
+}
+
+/**
+ * Serialises the operational KPIs to CSV — one row per scope — so the manager
+ * can download the report and open it in Excel. This is the loop-closing
+ * replacement for "email the spreadsheet": the numbers leave the app already
+ * consolidated, date-filtered and guarded, instead of being hand-maintained.
+ *
+ * `scopes` is typically ['ALL', ...sites]. The same `from`/`to` window is
+ * applied to every row so the file is internally consistent.
+ */
+export function operationsSummaryToCsv(
+  records: OperationsRecord[],
+  scopes: string[],
+  opts: { from?: string; to?: string } = {},
+): string {
+  const header = CSV_COLUMNS.map((c) => c.header).join(',');
+  const rows = scopes.map((scope) => {
+    const s = summariseOperations(records, { scope, from: opts.from, to: opts.to });
+    return CSV_COLUMNS.map((c) => csvCell(s[c.key])).join(',');
+  });
+  return [header, ...rows].join('\n');
+}
