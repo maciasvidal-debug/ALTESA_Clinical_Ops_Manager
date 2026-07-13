@@ -1254,8 +1254,8 @@ export default function App() {
         <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-2">
           <button
             onClick={() => { setOpsCaptureOpen(true); trackEvent('modal_opened', { modal: 'operations_capture' }); }}
-            aria-label="Capture operational data"
-            title="Capture operational data (interactions, referrals, compliance, dropout)"
+            aria-label="Capture Ops — operational data"
+            title="Capture Ops — interactions, referrals, triggers, compliance, dropout"
             className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 active:bg-black text-white text-xs font-medium px-3.5 py-2.5 rounded-full shadow-lg transition-all hover:shadow-xl"
           >
             <Users size={14} />

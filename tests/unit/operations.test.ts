@@ -30,6 +30,7 @@ import {
   hoursBetween,
   submitInteraction,
   setOperationsUser,
+  operationsSummaryToCsv,
   RANDOMIZATION_WINDOW_HOURS,
   type OperationsRecord,
   type PatientInteraction,
@@ -355,6 +356,59 @@ describe('OPS-010 — appendOperationsRecord / getAllOperations round-trip', () 
     expect(s.calls).toBe(1);
     expect(s.meetRatio).toBe(0.5);
     expect(s.patientsCurrentlyNonCompliant).toBe(1);
+  });
+});
+
+// ── OPS-012: CSV export ──────────────────────────────────────────────────────
+
+describe('OPS-012 — operationsSummaryToCsv', () => {
+  const recs = [
+    interaction({ siteId: '130', channel: 'call', direction: 'inbound', responseMinutes: 20 }),
+    interaction({ siteId: '131', channel: 'email' }),
+    referral({ siteId: '130', reviewed: 10, meetsCriteria: 5 }),
+    trigger({ siteId: '130', triggerAt: '2026-06-01T08:00:00', officeVisitAt: '2026-06-01T18:00:00' }),
+  ];
+
+  it('OPS-012.1 — header + one row per scope', () => {
+    const csv = operationsSummaryToCsv(recs, ['ALL', '130', '131']);
+    const lines = csv.split('\n');
+    expect(lines).toHaveLength(4); // header + 3 scopes
+    expect(lines[0]).toContain('Scope');
+    expect(lines[0]).toContain('Window breaches');
+    expect(lines[1].startsWith('ALL,')).toBe(true);
+    expect(lines[2].startsWith('130,')).toBe(true);
+  });
+
+  it('OPS-012.2 — ALL row aggregates across sites', () => {
+    const csv = operationsSummaryToCsv(recs, ['ALL']);
+    const cols = csv.split('\n')[0].split(',');
+    const row = csv.split('\n')[1].split(',');
+    const cell = (h: string) => row[cols.indexOf(h)];
+    expect(cell('Total interactions')).toBe('2');
+    expect(cell('Meet ratio')).toBe('0.50');       // 5/10, formatted, not #DIV/0!
+    expect(cell('Avg trigger→visit (h)')).toBe('10');
+  });
+
+  it('OPS-012.3 — null metrics render as empty cells (no NaN / #DIV/0!)', () => {
+    const csv = operationsSummaryToCsv([], ['ALL']);
+    const cols = csv.split('\n')[0].split(',');
+    const row = csv.split('\n')[1].split(',');
+    expect(row[cols.indexOf('Avg response (min)')]).toBe('');
+    expect(row[cols.indexOf('Meet ratio')]).toBe('');
+    expect(csv).not.toMatch(/NaN|#DIV|Infinity/);
+  });
+
+  it('OPS-012.4 — date range is applied to every row', () => {
+    const csv = operationsSummaryToCsv(recs, ['ALL'], { from: '2020-01-01', to: '2020-12-31' });
+    const cols = csv.split('\n')[0].split(',');
+    const row = csv.split('\n')[1].split(',');
+    expect(row[cols.indexOf('From')]).toBe('2020-01-01');
+    expect(row[cols.indexOf('Total interactions')]).toBe('0'); // nothing in that window
+  });
+
+  it('OPS-012.5 — a scope containing a comma is RFC-4180 quoted', () => {
+    const csv = operationsSummaryToCsv([interaction({ siteId: 'A,B' })], ['A,B']);
+    expect(csv.split('\n')[1]).toContain('"A,B"');
   });
 });
 

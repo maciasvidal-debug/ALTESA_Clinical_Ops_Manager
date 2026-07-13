@@ -18,7 +18,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Activity, Phone, MessageSquare, Mail, Users, TrendingDown,
-  UserCheck, RefreshCw, Loader, Globe, Database, Timer, Clock, AlertTriangle,
+  UserCheck, RefreshCw, Loader, Globe, Database, Timer, Clock, AlertTriangle, Download,
 } from 'lucide-react';
 import type { Patient } from '@/lib/data';
 import { getSiteId } from '@/lib/data';
@@ -27,9 +27,11 @@ import {
   summariseOperations,
   deriveStatusCounts,
   sitesInRecords,
+  operationsSummaryToCsv,
   STATUS_LABELS,
   RANDOMIZATION_WINDOW_HOURS,
 } from '@/lib/operations';
+import { autoNonCompliantIds, ADHERENCE_THRESHOLD } from '@/lib/compliance';
 
 type RangePreset = 'all' | '7d' | '30d' | 'month';
 
@@ -95,6 +97,23 @@ export function OperationsDashboard({ patients }: OperationsDashboardProps) {
     return [...s].filter(Boolean).sort();
   }, [records, patients]);
 
+  // Export the KPIs as CSV — one row per scope (ALL + each site) for the current
+  // date range. This is the loop-closing replacement for "email the spreadsheet".
+  const exportCsv = useCallback(() => {
+    const { from: f, to: t } = rangeToDates(preset);
+    const exportScopes = ['ALL', ...sites];
+    const csv = operationsSummaryToCsv(records, exportScopes, { from: f, to: t });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ALTESA_Operational_KPIs_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [records, sites, preset]);
+
   const { from, to } = rangeToDates(preset);
   const summary = useMemo(
     () => summariseOperations(records, { scope, from, to }),
@@ -106,9 +125,17 @@ export function OperationsDashboard({ patients }: OperationsDashboardProps) {
     () => (scope === 'ALL' ? patients : patients.filter((p) => getSiteId(p) === scope)),
     [patients, scope],
   );
+  // Auto-detected low-adherence patients (derived from PSB ePRO records), merged
+  // with explicit ComplianceEvent records so the non-compliant status reflects
+  // both sources without double-counting a patient flagged by both.
+  const autoIds = useMemo(() => autoNonCompliantIds(scopedPatients), [scopedPatients]);
+  const nonCompliantIds = useMemo(
+    () => new Set<string>([...summary.patientIdsCurrentlyNonCompliant, ...autoIds]),
+    [summary.patientIdsCurrentlyNonCompliant, autoIds],
+  );
   const statusCounts = useMemo(
-    () => deriveStatusCounts(scopedPatients, new Set(summary.patientIdsCurrentlyNonCompliant)),
-    [scopedPatients, summary.patientIdsCurrentlyNonCompliant],
+    () => deriveStatusCounts(scopedPatients, nonCompliantIds),
+    [scopedPatients, nonCompliantIds],
   );
 
   if (loading) {
@@ -152,6 +179,15 @@ export function OperationsDashboard({ patients }: OperationsDashboardProps) {
               <option key={k} value={k}>{RANGE_LABELS[k]}</option>
             ))}
           </select>
+          <button
+            onClick={exportCsv}
+            disabled={empty}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 text-xs text-neutral-600 dark:text-neutral-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label="Export operational KPIs as CSV"
+            title="Export operational KPIs as CSV"
+          >
+            <Download size={13} /> CSV
+          </button>
           <button
             onClick={() => load(true)}
             disabled={refreshing}
@@ -234,10 +270,15 @@ export function OperationsDashboard({ patients }: OperationsDashboardProps) {
       </Section>
 
       {/* Compliance & retention — operational */}
-      <Section title="Compliance & Retention" subtitle="Distinct patients — not spreadsheet rows">
+      <Section title="Compliance & Retention" subtitle={`Distinct patients · below-${Math.round(ADHERENCE_THRESHOLD * 100)}% adherence auto-detected from PSB ePRO records`}>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Kpi icon={<TrendingDown size={16} className="text-amber-500" />} label="Currently non-compliant" value={String(summary.patientsCurrentlyNonCompliant)} />
-          <Kpi icon={<Activity size={16} className="text-amber-500" />} label="Avg days out" value={fmtNum(summary.avgDaysOutOfCompliance, 1)} />
+          <Kpi
+            icon={<TrendingDown size={16} className={autoIds.size > 0 ? 'text-amber-500' : 'text-neutral-400'} />}
+            label={`Below ${Math.round(ADHERENCE_THRESHOLD * 100)}% (auto)`}
+            value={String(autoIds.size)}
+            sub="Derived from ePRO"
+          />
+          <Kpi icon={<TrendingDown size={16} className="text-amber-500" />} label="Non-compliant (logged)" value={String(summary.patientsCurrentlyNonCompliant)} sub={`${fmtNum(summary.avgDaysOutOfCompliance, 1)} avg days out`} />
           <Kpi icon={<UserCheck size={16} className="text-emerald-500" />} label="Dropouts prevented" value={String(summary.dropoutsPrevented)} />
           <Kpi icon={<TrendingDown size={16} className="text-rose-500" />} label="Dropouts" value={String(summary.dropouts)} />
         </div>
