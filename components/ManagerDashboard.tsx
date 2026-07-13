@@ -53,6 +53,7 @@ import {
 import { DLPWrapper } from "@/components/DLPWrapper";
 import { PinConfirmModal } from "@/components/PinConfirmModal";
 import { WorkloadDashboard } from "@/components/WorkloadDashboard";
+import { OperationsDashboard } from "@/components/OperationsDashboard";
 import { verifyAndDecrypt, encryptAndSign, generateCRCKeys } from "@/lib/crypto";
 import {
   LineChart,
@@ -3798,8 +3799,11 @@ export function ManagerDashboard({
             )}
 
             {activeTab === "workload" && (
-              <div style={{ padding: "24px" }}>
-                <WorkloadDashboard />
+              <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "32px" }}>
+                <OperationsDashboard patients={patients} />
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: "24px" }}>
+                  <WorkloadDashboard />
+                </div>
               </div>
             )}
           </div>

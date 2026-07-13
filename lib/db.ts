@@ -2,6 +2,7 @@ import localforage from 'localforage';
 type LocalForage = typeof localforage;
 import { Patient, ProtocolAmendment } from './data';
 import type { TelemetryRecord } from './telemetry';
+import type { OperationsRecord } from './operations';
 
 // Initialize instances for different data domains
 export const patientsStore = localforage.createInstance({
@@ -37,6 +38,11 @@ export const logsStore = localforage.createInstance({
 export const telemetryStore = localforage.createInstance({
   name: 'ALTESA_DB',
   storeName: 'telemetry'
+});
+
+export const operationsStore = localforage.createInstance({
+  name: 'ALTESA_DB',
+  storeName: 'operations'
 });
 
 /** Injectable store overrides — used exclusively in tests for fault injection. */
@@ -153,20 +159,21 @@ export async function wipeAllData(
     patientsStore?: LocalForage; protocolStore?: LocalForage;
     configStore?: LocalForage;  auditStore?: LocalForage;
     keysStore?: LocalForage;    logsStore?: LocalForage;
-    telemetryStore?: LocalForage;
+    telemetryStore?: LocalForage; operationsStore?: LocalForage;
   } = {}
 ): Promise<void> {
   if (confirm !== 'WIPE_CONFIRMED') {
     throw new Error('wipeAllData requires explicit confirmation string.');
   }
   await Promise.all([
-    (_stores.patientsStore  ?? patientsStore).clear(),
-    (_stores.protocolStore  ?? protocolStore).clear(),
-    (_stores.configStore    ?? configStore).clear(),
-    (_stores.auditStore     ?? auditStore).clear(),
-    (_stores.keysStore      ?? keysStore).clear(),
-    (_stores.logsStore      ?? logsStore).clear(),
-    (_stores.telemetryStore ?? telemetryStore).clear(),
+    (_stores.patientsStore   ?? patientsStore).clear(),
+    (_stores.protocolStore   ?? protocolStore).clear(),
+    (_stores.configStore     ?? configStore).clear(),
+    (_stores.auditStore      ?? auditStore).clear(),
+    (_stores.keysStore       ?? keysStore).clear(),
+    (_stores.logsStore       ?? logsStore).clear(),
+    (_stores.telemetryStore  ?? telemetryStore).clear(),
+    (_stores.operationsStore ?? operationsStore).clear(),
   ]);
 }
 
@@ -199,6 +206,38 @@ export async function getTelemetryByDate(
   const results: TelemetryRecord[] = [];
   await _store.iterate((value: TelemetryRecord) => {
     if (value?.timestamp?.startsWith(isoDate)) {
+      results.push(value);
+    }
+  });
+  return results;
+}
+
+// ── Operations DB Operations ──────────────────────────────────────────────────
+
+/**
+ * Persists a single operational-capture record keyed by its UUID-based id.
+ * Idempotent by construction: re-writing the same id overwrites with identical
+ * data. Mirrors appendTelemetryEvent so the two capture layers behave alike.
+ */
+export async function appendOperationsRecord(
+  record: OperationsRecord,
+  _store: LocalForage = operationsStore,
+): Promise<void> {
+  await _store.setItem(record.id, record);
+}
+
+/**
+ * Returns every operational-capture record in the store. Date-range and
+ * site scoping are applied downstream by summariseOperations, so this is a
+ * plain O(n) iterate. Defensive null filter guards against manually-injected
+ * null values (see DB-007).
+ */
+export async function getAllOperations(
+  _store: LocalForage = operationsStore,
+): Promise<OperationsRecord[]> {
+  const results: OperationsRecord[] = [];
+  await _store.iterate((value: OperationsRecord) => {
+    if (value != null && typeof value === 'object' && 'kind' in value) {
       results.push(value);
     }
   });
