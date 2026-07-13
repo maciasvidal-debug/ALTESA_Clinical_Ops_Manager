@@ -31,6 +31,7 @@ import {
   STATUS_LABELS,
   RANDOMIZATION_WINDOW_HOURS,
 } from '@/lib/operations';
+import { autoNonCompliantIds, ADHERENCE_THRESHOLD } from '@/lib/compliance';
 
 type RangePreset = 'all' | '7d' | '30d' | 'month';
 
@@ -124,9 +125,17 @@ export function OperationsDashboard({ patients }: OperationsDashboardProps) {
     () => (scope === 'ALL' ? patients : patients.filter((p) => getSiteId(p) === scope)),
     [patients, scope],
   );
+  // Auto-detected low-adherence patients (derived from PSB ePRO records), merged
+  // with explicit ComplianceEvent records so the non-compliant status reflects
+  // both sources without double-counting a patient flagged by both.
+  const autoIds = useMemo(() => autoNonCompliantIds(scopedPatients), [scopedPatients]);
+  const nonCompliantIds = useMemo(
+    () => new Set<string>([...summary.patientIdsCurrentlyNonCompliant, ...autoIds]),
+    [summary.patientIdsCurrentlyNonCompliant, autoIds],
+  );
   const statusCounts = useMemo(
-    () => deriveStatusCounts(scopedPatients, new Set(summary.patientIdsCurrentlyNonCompliant)),
-    [scopedPatients, summary.patientIdsCurrentlyNonCompliant],
+    () => deriveStatusCounts(scopedPatients, nonCompliantIds),
+    [scopedPatients, nonCompliantIds],
   );
 
   if (loading) {
@@ -261,10 +270,15 @@ export function OperationsDashboard({ patients }: OperationsDashboardProps) {
       </Section>
 
       {/* Compliance & retention — operational */}
-      <Section title="Compliance & Retention" subtitle="Distinct patients — not spreadsheet rows">
+      <Section title="Compliance & Retention" subtitle={`Distinct patients · below-${Math.round(ADHERENCE_THRESHOLD * 100)}% adherence auto-detected from PSB ePRO records`}>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Kpi icon={<TrendingDown size={16} className="text-amber-500" />} label="Currently non-compliant" value={String(summary.patientsCurrentlyNonCompliant)} />
-          <Kpi icon={<Activity size={16} className="text-amber-500" />} label="Avg days out" value={fmtNum(summary.avgDaysOutOfCompliance, 1)} />
+          <Kpi
+            icon={<TrendingDown size={16} className={autoIds.size > 0 ? 'text-amber-500' : 'text-neutral-400'} />}
+            label={`Below ${Math.round(ADHERENCE_THRESHOLD * 100)}% (auto)`}
+            value={String(autoIds.size)}
+            sub="Derived from ePRO"
+          />
+          <Kpi icon={<TrendingDown size={16} className="text-amber-500" />} label="Non-compliant (logged)" value={String(summary.patientsCurrentlyNonCompliant)} sub={`${fmtNum(summary.avgDaysOutOfCompliance, 1)} avg days out`} />
           <Kpi icon={<UserCheck size={16} className="text-emerald-500" />} label="Dropouts prevented" value={String(summary.dropoutsPrevented)} />
           <Kpi icon={<TrendingDown size={16} className="text-rose-500" />} label="Dropouts" value={String(summary.dropouts)} />
         </div>
