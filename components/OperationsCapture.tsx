@@ -14,10 +14,10 @@
  * DERIVED (see lib/operations.deriveOpStatus), so the coordinator never types it.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   X, Phone, MessageSquare, Mail, MoreHorizontal, CheckCircle, Loader,
-  ArrowUpRight, ArrowDownLeft, Users, TrendingDown, LogOut,
+  ArrowUpRight, ArrowDownLeft, Users, TrendingDown, LogOut, Zap,
 } from 'lucide-react';
 import type { Patient } from '@/lib/data';
 import { getSiteId } from '@/lib/data';
@@ -29,10 +29,21 @@ import {
   submitComplianceEvent,
   submitDropoutEvent,
   submitTriggerEvent,
+  completeTriggerVisit,
+  findOpenTrigger,
   setOperationsUser,
   hoursBetween,
   RANDOMIZATION_WINDOW_HOURS,
+  type OperationsRecord,
 } from '@/lib/operations';
+
+/** ISO datetime → the `YYYY-MM-DDTHH:mm` shape a datetime-local input expects. */
+function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 type Tab = 'interaction' | 'referral' | 'compliance' | 'dropout' | 'trigger';
 
@@ -105,6 +116,39 @@ export function OperationsCapture({ onClose, patients, userId, defaultPatientId 
   const [tPatient, setTPatient] = useState<string>(defaultPatientId ?? '');
   const [tTrigger, setTTrigger] = useState<string>('');
   const [tVisit, setTVisit] = useState<string>('');
+  // Existing OPEN trigger (auto-created when the DTQ turned positive), if any.
+  const [opsRecords, setOpsRecords] = useState<OperationsRecord[]>([]);
+  const [openTriggerId, setOpenTriggerId] = useState<string | null>(null);
+
+  // Load operational records once so the Trigger tab can pre-fill / complete an
+  // auto-created onset instead of asking the coordinator to re-type it.
+  const reloadOps = async () => {
+    try {
+      const { getAllOperations } = await import('@/lib/db');
+      setOpsRecords(await getAllOperations());
+    } catch { /* non-fatal */ }
+  };
+  useEffect(() => { reloadOps(); }, []);
+
+  // Tracks whether the onset field currently holds an auto-filled value, so that
+  // switching to a patient WITHOUT an open trigger clears the stale onset without
+  // wiping a legitimately hand-typed manual entry.
+  const triggerAutoFilledRef = useRef(false);
+
+  // When a patient is chosen for the Trigger tab, pre-fill from their open
+  // trigger (the DTQ-positive onset). If none exists, clear only a previously
+  // auto-filled value; manual entry is preserved.
+  useEffect(() => {
+    const open = tPatient ? findOpenTrigger(opsRecords, tPatient) : null;
+    setOpenTriggerId(open?.id ?? null);
+    if (open) {
+      setTTrigger(toLocalInput(open.triggerAt));
+      triggerAutoFilledRef.current = true;
+    } else if (triggerAutoFilledRef.current) {
+      setTTrigger('');
+      triggerAutoFilledRef.current = false;
+    }
+  }, [tPatient, opsRecords]);
 
   // ── Dropout form ──────────────────────────────────────────────────────────
   const [dPatient, setDPatient] = useState<string>(defaultPatientId ?? '');
@@ -169,14 +213,22 @@ export function OperationsCapture({ onClose, patients, userId, defaultPatientId 
         setCReturned(''); setCReason('');
       } else if (tab === 'trigger') {
         if (!tPatient) throw new Error('Select a patient.');
-        if (!tTrigger) throw new Error('Enter the trigger date & time.');
-        await submitTriggerEvent({
-          siteId: patientSite(tPatient),
-          patientId: tPatient,
-          triggerAt: tTrigger,
-          officeVisitAt: tVisit || undefined,
-        });
-        setTTrigger(''); setTVisit('');
+        if (openTriggerId) {
+          // Completing the auto-created onset — only the office visit is needed.
+          if (!tVisit) throw new Error('Enter the office visit date & time.');
+          await completeTriggerVisit(openTriggerId, tVisit);
+        } else {
+          if (!tTrigger) throw new Error('Enter the trigger date & time.');
+          await submitTriggerEvent({
+            siteId: patientSite(tPatient),
+            patientId: tPatient,
+            triggerAt: tTrigger,
+            officeVisitAt: tVisit || undefined,
+          });
+        }
+        setTTrigger(''); setTVisit(''); setOpenTriggerId(null);
+        triggerAutoFilledRef.current = false;
+        await reloadOps();
       } else {
         if (!dPatient) throw new Error('Select a patient.');
         if (!dIntent && !dDropout) throw new Error('Enter an intent date or a dropout date.');
@@ -332,18 +384,29 @@ export function OperationsCapture({ onClose, patients, userId, defaultPatientId 
                     {patientOptions(true, 'Select patient…')}
                   </select>
                 </Field>
+                {openTriggerId && (
+                  <div style={{
+                    marginBottom: '16px', padding: '8px 12px', borderRadius: 'var(--r1)', fontSize: '12px',
+                    background: 'var(--blue-bg)', color: 'var(--blue)', border: '1px solid var(--border)',
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                  }}>
+                    <Zap size={13} /> Onset auto-filled from the DTQ-positive check — just add the office visit to complete it.
+                  </div>
+                )}
                 <Row>
-                  <Field label="ePRO trigger (symptom onset)">
+                  <Field label={openTriggerId ? 'ePRO trigger (from DTQ)' : 'ePRO trigger (symptom onset)'}>
                     <input type="datetime-local" className="modal-input" value={tTrigger}
-                      onChange={(e) => setTTrigger(e.target.value)} />
+                      onChange={(e) => setTTrigger(e.target.value)}
+                      readOnly={!!openTriggerId}
+                      style={openTriggerId ? { background: 'var(--bg)', color: 'var(--t3)', cursor: 'not-allowed' } : undefined} />
                   </Field>
-                  <Field label="Office visit (optional)">
+                  <Field label={openTriggerId ? 'Office visit' : 'Office visit (optional)'}>
                     <input type="datetime-local" className="modal-input" value={tVisit}
                       onChange={(e) => setTVisit(e.target.value)} />
                   </Field>
                 </Row>
                 <TriggerPreview triggerAt={tTrigger} visitAt={tVisit} />
-                <Hint>Hours are computed from the two timestamps — no manual math. Leave the visit empty until the patient attends.</Hint>
+                <Hint>Hours are computed from the two timestamps — no manual math. {openTriggerId ? 'The onset was captured when the DTQ turned positive.' : 'Leave the visit empty until the patient attends.'}</Hint>
               </>
             )}
 
@@ -419,6 +482,7 @@ export function OperationsCapture({ onClose, patients, userId, defaultPatientId 
                 : submitted ? <><CheckCircle size={14} /> Saved</>
                 : tab === 'dropout' ? <><LogOut size={14} /> Log dropout event</>
                 : tab === 'compliance' ? <><TrendingDown size={14} /> Log compliance event</>
+                : tab === 'trigger' && openTriggerId ? <><Zap size={14} /> Complete trigger visit</>
                 : <>Save {tab}</>}
             </button>
           </div>

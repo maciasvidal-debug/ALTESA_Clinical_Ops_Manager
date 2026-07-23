@@ -428,6 +428,59 @@ export async function submitTriggerEvent(input: TriggerInput): Promise<TriggerEv
   return rec;
 }
 
+/**
+ * Most recent OPEN trigger (symptom recorded, office visit not yet logged) for a
+ * patient, or null. Used to pre-fill / complete the trigger from the capture UI
+ * instead of asking the coordinator to re-type the DTQ-positive timestamp.
+ */
+export function findOpenTrigger(records: OperationsRecord[], patientId: string): TriggerEvent | null {
+  const open = records.filter(
+    (r): r is TriggerEvent => r.kind === 'trigger' && r.patientId === patientId && !r.officeVisitAt,
+  );
+  open.sort((a, b) => b.triggerAt.localeCompare(a.triggerAt));
+  return open[0] ?? null;
+}
+
+/**
+ * Completes an existing (open) trigger by stamping its office-visit time,
+ * rather than creating a second record. Idempotent by id — the trigger→visit
+ * gap is then computed from the original DTQ-positive timestamp.
+ */
+export async function completeTriggerVisit(triggerId: string, officeVisitAt: string): Promise<TriggerEvent> {
+  const { getAllOperations, appendOperationsRecord } = await import('@/lib/db');
+  const all = await getAllOperations();
+  const rec = all.find((r) => r.id === triggerId && r.kind === 'trigger') as TriggerEvent | undefined;
+  if (!rec) throw new Error('Open trigger not found.');
+  if (officeVisitAt && new Date(officeVisitAt).getTime() < new Date(rec.triggerAt).getTime()) {
+    throw new Error('officeVisitAt cannot precede triggerAt.');
+  }
+  const updated: TriggerEvent = { ...rec, officeVisitAt };
+  await appendOperationsRecord(updated);
+  return updated;
+}
+
+/**
+ * Auto-records the trigger onset the moment a DTQ turns positive, so the
+ * symptom timestamp is captured contemporaneously without manual entry.
+ * De-duplicates: if the patient already has an open trigger, does nothing and
+ * returns null (the existing one will be completed at the office visit).
+ */
+export async function autoRecordTriggerOnset(input: {
+  siteId: string;
+  patientId: string;
+  triggerAt?: string;
+}): Promise<TriggerEvent | null> {
+  if (!input.siteId || !input.patientId) return null;
+  const { getAllOperations } = await import('@/lib/db');
+  const all = await getAllOperations();
+  if (findOpenTrigger(all, input.patientId)) return null;
+  return submitTriggerEvent({
+    siteId: input.siteId,
+    patientId: input.patientId,
+    triggerAt: input.triggerAt ?? nowISO(),
+  });
+}
+
 // ── Public API — Aggregation (the guarded roll-up) ───────────────────────────
 
 export type OperationsSummary = {

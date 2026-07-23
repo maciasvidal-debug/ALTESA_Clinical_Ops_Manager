@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
-  PATIENTS, fmtHuman, fmtISO, getToday, diffDays, addDays,
+  PATIENTS, fmtHuman, fmtISO, getToday, diffDays, addDays, getSiteId,
   GLOSSARY, WZ_STEPS, PROTOCOL_AMENDMENTS, type ProtocolAmendment,
   type Patient, type Notification, type Document, type Task
 } from '@/lib/data';
+import { autoRecordTriggerOnset } from '@/lib/operations';
 import {
   getTimelineMarkerPct, getStudyDay, getPSBWeek,
   getRescreeningStatus as getRescreeningStatusTemporal,
@@ -634,14 +635,19 @@ export default function App() {
   }, [pin, handleLoginSuccess, showToast]);
 
   const handleDTQResult = (pid: string, isPos: boolean) => {
+    // Side effects run once here in the event handler — NOT inside the setPatients
+    // updater, which React StrictMode double-invokes (that would auto-create two
+    // trigger records for one DTQ-positive).
+    const patient = patients.find(p => p.id === pid);
+
     setPatients(prev => prev.map(p => {
       if (p.id !== pid) return p;
       const updatedTasks = { ...p.tasks };
       updatedTasks.q = updatedTasks.q.map(t => {
         if (t.code === 'DTQ') {
-          return { 
-            ...t, 
-            done: true, 
+          return {
+            ...t,
+            done: true,
             note: isPos ? '⚠ POSITIVE — RV symptom onset confirmed. RV Protocol activated.' : 'Answer: NO',
             urgNote: isPos ? 'crit-note' : undefined,
             critical: isPos ? true : t.critical
@@ -649,18 +655,26 @@ export default function App() {
         }
         return t;
       });
-      
-      if (isPos) {
-        setCdStart(Date.now() - 3 * 3600000); // Start countdown
-        setWzOpen(true); // Open wizard
-        showToast('DTQ POSITIVE: RV Protocol Activated', 'crit');
-        return { ...p, dtqPos: true, alert: 'DTQ_POSITIVE', tasks: updatedTasks };
-      } else {
-        showToast('DTQ Negative: Patient remains in PSB', 'ok');
-        return { ...p, dtqPos: false, alert: null, tasks: updatedTasks };
-      }
+      return isPos
+        ? { ...p, dtqPos: true, alert: 'DTQ_POSITIVE', tasks: updatedTasks }
+        : { ...p, dtqPos: false, alert: null, tasks: updatedTasks };
     }));
-    
+
+    if (isPos) {
+      setCdStart(Date.now() - 3 * 3600000); // Start countdown
+      setWzOpen(true); // Open wizard
+      showToast('DTQ POSITIVE: RV Protocol Activated', 'crit');
+      // Contemporaneously capture the symptom-onset timestamp as an open trigger
+      // event, so the Operational Capture › Trigger tab can be completed at the
+      // office visit without re-typing the DTQ-positive date. Fire-and-forget:
+      // a telemetry write must never interrupt the clinical flow.
+      if (patient) {
+        autoRecordTriggerOnset({ siteId: getSiteId(patient), patientId: pid }).catch(() => { /* silent */ });
+      }
+    } else {
+      showToast('DTQ Negative: Patient remains in PSB', 'ok');
+    }
+
     setChkd(prev => {
       const next = { ...prev };
       if (!next[pid]) next[pid] = new Set();
