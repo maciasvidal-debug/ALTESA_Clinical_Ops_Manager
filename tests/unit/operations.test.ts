@@ -285,6 +285,47 @@ describe('OPS-011 — symptom trigger → office visit', () => {
   });
 });
 
+// ── OPS-013: DTQ→trigger auto-capture & completion ───────────────────────────
+
+describe('OPS-013 — findOpenTrigger / completeTriggerVisit', () => {
+  it('OPS-013.1 — findOpenTrigger returns the most recent open trigger for a patient', async () => {
+    const { findOpenTrigger } = await import('@/lib/operations');
+    const recs = [
+      trigger({ id: 't1', patientId: 'P1', triggerAt: '2026-06-01T08:00:00' }),                                   // open, older
+      trigger({ id: 't2', patientId: 'P1', triggerAt: '2026-06-05T08:00:00' }),                                   // open, newer
+      trigger({ id: 't3', patientId: 'P1', triggerAt: '2026-05-01T08:00:00', officeVisitAt: '2026-05-01T20:00:00' }), // closed
+      trigger({ id: 't4', patientId: 'P2', triggerAt: '2026-06-09T08:00:00' }),                                   // other patient
+    ];
+    expect(findOpenTrigger(recs, 'P1')?.id).toBe('t2');
+    expect(findOpenTrigger(recs, 'P3')).toBeNull();
+  });
+
+  it('OPS-013.2 — completeTriggerVisit stamps the visit on the SAME record (no new row)', async () => {
+    const store = new FakeStore();
+    const open = trigger({ id: 't1', patientId: 'P1', triggerAt: '2026-06-01T08:00:00' });
+    await appendOperationsRecord(open, store as any);
+    // completeTriggerVisit imports @/lib/db which uses the module-level store, so
+    // assert the pure invariant here: same id, gap computed from original onset.
+    const { findOpenTrigger, summariseOperations } = await import('@/lib/operations');
+    const all = await getAllOperations(store as any);
+    const found = findOpenTrigger(all, 'P1')!;
+    const completed = { ...found, officeVisitAt: '2026-06-01T20:00:00' };
+    await appendOperationsRecord(completed, store as any); // same id ⇒ overwrite
+    const after = await getAllOperations(store as any);
+    expect(after.filter((r) => r.id === 't1')).toHaveLength(1);
+    const s = summariseOperations(after);
+    expect(s.triggerCount).toBe(1);
+    expect(s.triggersPendingVisit).toBe(0);
+    expect(s.avgTriggerToVisitHours).toBe(12);
+  });
+
+  it('OPS-013.3 — completing an open trigger removes it from findOpenTrigger', async () => {
+    const { findOpenTrigger } = await import('@/lib/operations');
+    const closed = trigger({ id: 't1', patientId: 'P1', triggerAt: '2026-06-01T08:00:00', officeVisitAt: '2026-06-01T18:00:00' });
+    expect(findOpenTrigger([closed], 'P1')).toBeNull();
+  });
+});
+
 // ── OPS-008: derived status ──────────────────────────────────────────────────
 
 describe('OPS-008 — derived patient status (no manual typing)', () => {
