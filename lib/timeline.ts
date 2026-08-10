@@ -530,8 +530,10 @@ export const VISIT_D42: VisitDef = {
 //   Weeks 8, 12 within each 12-week period: Monthly Phone Call embedded in block
 //   SGRQ: Week 1 (baseline) + every 8 weeks from Week 8 (clinic visit, first day only)
 
-// Weeks with SGRQ: Week 1 (baseline) + Week 8 and every 8 weeks thereafter
-const PSB_SGRQ_WEEKS = new Set([1, 8, 16, 24, 32, 40, 48, 64]);
+// Weeks with SGRQ: Week 1 (baseline) + Week 8 and every 8 weeks thereafter.
+// Week 56 confirmed by the study team (OQ-6) — restores the 8-week cadence
+// between Week 48 and Week 64, which the prior set skipped.
+const PSB_SGRQ_WEEKS = new Set([1, 8, 16, 24, 32, 40, 48, 56, 64]);
 
 /**
  * Generates PSB visit defs up to maxWeeks with per-week granularity.

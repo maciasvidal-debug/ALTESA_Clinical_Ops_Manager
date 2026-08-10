@@ -3,8 +3,10 @@
 **Study:** ALTESA Clinical Ops Manager
 **Scope:** Change requests CR-01 … CR-10
 **Author role:** Senior GxP software architect / protocol analyst / compliance reviewer / refactoring strategist
-**Document type:** Phase 1 deliverable — Requirement validation & gap analysis (Phases 2–7 planned, not yet executed)
-**Status:** Draft for stakeholder review. **No production code has been changed by this analysis.**
+**Document type:** Phase 1 deliverable (requirement validation & gap analysis) + Phase 2 log
+(compliance-engine redesign, partial — see §12).
+**Status:** Phase 1 complete. Phase 2 partially implemented against stakeholder-resolved open questions
+(§8). Phases 3, 4 (design only), 5–7 not yet executed.
 
 > **Governing rule of this document.** Every statement about *current* behavior is grounded in a
 > specific file/line in this repository. Every statement about *required* behavior is grounded in the
@@ -112,16 +114,16 @@ Verdict legend: **✅ Aligned** (protocol-consistent, may need wiring) · **🟠
 
 | CR | Request | Verdict | Evidence & rationale |
 |----|---------|---------|----------------------|
-| **CR-01** | Display questionnaire-only compliance | 🟠 Gap | No questionnaire-only metric exists. The displayed "Compliance Index" is all-category `countTasks` (§2.1). Requires a new metric restricted to the `Q`-category **protocol ePROs**. |
-| **CR-02** | Questionnaire compliance must include DTQ | 🟠 Gap | DTQ is a `Q` item (`lib/timeline.ts:100`, daily in PSB) but is in **no** compliance calculation today (§2.2 uses E-RS only). Must be added to the questionnaire denominator/numerator. |
-| **CR-03** | Non-questionnaire activities must not affect questionnaire compliance | 🔴 Contradiction (data) | Two concrete defects: (a) the displayed metric mixes PR/L/AD into "compliance" (§2.1); (b) **PRN (Rescue Inhaler) is mis-bucketed into the `q` array** for HMC-012 (`lib/data.ts:295`), CUN-023 (`:322`), CUN-058 (`:417`) while the canonical matrix classes PRN as `AD` (`lib/timeline.ts:151`). Any "category `q`" definition of questionnaire compliance would silently count the Rescue Inhaler for those patients. Must be resolved by **code = a curated questionnaire allow-list**, not by trusting `tasks.q`. |
-| **CR-04** | Display task completion percentage independently | 🟠 Gap | `countTasks` exists and is the right primitive, but it is currently **labeled** "Compliance." CR-04 = keep the number, **rename/relocate** it as "Task completion," and stop calling it compliance. Low risk once §2.1 is decoupled. |
-| **CR-05** | Display participant payment eligibility | 🟠 Gap (greenfield) | **No payment concept exists anywhere** (only a `payment=()` Permissions-Policy header, `next.config.ts:55`). Entire `payment_compliance` domain (≥80% of protocol-required questionnaires within a defined month, PRN weight 0) is new. Blocked on Open Questions OQ-1/OQ-2. |
-| **CR-06** | Enable retrospective timeline corrections | 🔴 Contradiction (architecture) | The timeline is **derived, not stored** (§2.5). "Correcting" it today means mutating anchor dates on the `Patient` record **in place**, with no historical record. No correction data model exists. Requires a new stored, versioned correction envelope. |
-| **CR-07** | Timeline corrections must satisfy ALCOA+ | 🔴 Contradiction (architecture) | No correction preserves {original, corrected, user, timestamp, reason} today (`LogEntry` lacks these fields, `lib/data.ts:34-44`); the "immutable audit ledger" is mocked UI state (`ManagerDashboard.tsx:286`). Physical overwrite is currently possible → violates "historical records must never be destroyed." Requires append-only, hash-chained audit + correction schema. |
-| **CR-08** | Merge Coordinator + Manager into one Navigator role | 🔴 Contradiction (security) | Coordinator (task mutation) and Manager (protocol authoring, key/activation-code generation, master password — `lib/security.ts:92-110`, `MANUAL_MANAGER.md`) are **separation-of-duties boundaries**. A naive union grants every Navigator the ability to author protocol amendments *and* complete the very tasks those amendments govern — a self-approval / privilege-escalation path. Requires a permission matrix and gap analysis (role_consolidation rules) **before** any merge. Note the label "Navigator" already exists in-code (§2.4). |
-| **CR-09** | Questionnaire collection must strictly begin at the screening visit | 🔴 Contradiction (SoA) | Per the SoA as encoded: the daily ePRO questionnaires (**DTQ, E-RS/PGIS, WURSS**) begin at **PSB Day 1 = `psbStartDate`** (`lib/timeline.ts:211-220`, `buildPSBVisitDefs`), which is ~3 weeks **after** screening (`lib/data.ts:277` "PSB Start (Theoretical)"). Only **CAT** is a Screening/Rescreening questionnaire (`lib/timeline.ts:96-97`). Taking CR-09 literally would start daily ePRO accrual before the protocol schedules it, inflating denominators. **Higher-priority source (SoA) wins** pending clarification — see OQ-3. |
-| **CR-10** | Rescue Inhaler strictly excluded from compliance % | ✅ Aligned (intent) / 🔴 (data) | Matches the protocol finding (PRN is a conditional PRN event, weight 0). The **intent** is correct and consistent; the **blocker** is the same mis-bucketing as CR-03 — PRN sits in `tasks.q` for three patients. Exclusion must be enforced by an explicit exclusion set keyed on code `'PRN'` (and any future PRN/conditional codes), independent of which array the seed data happens to use. |
+| **CR-01** | Display questionnaire-only compliance | 🟢 Engine implemented (Phase 2) | `computeQuestionnaireCompliance()` added in `lib/compliance.ts` (§12). UI surfacing is Phase 5. |
+| **CR-02** | Questionnaire compliance must include DTQ | 🟢 Implemented (Phase 2) | DTQ is in `QUESTIONNAIRE_CODES` (`lib/compliance.ts`). |
+| **CR-03** | Non-questionnaire activities must not affect questionnaire compliance | 🟢 Implemented (Phase 2) | Fixed at the root: PRN seed-data mis-bucketing corrected for HMC-012/CUN-023/CUN-058 (moved `tasks.q` → `tasks.ad`, `lib/data.ts`), **and** the calculator uses an explicit code allow-list independent of array placement (defense in depth — CAT/HVIR are legitimately category `Q` but must still be excluded). Regression-guarded: CMP-006.3, CMP-006.4, CMP-006.8 in `tests/unit/compliance.test.ts`. |
+| **CR-04** | Display task completion percentage independently | 🟡 Engine unaffected, UI pending | `countTasks` (`lib/data.ts:604`) remains the correct all-category primitive; relabeling away from "Compliance" in the UI is Phase 5. |
+| **CR-05** | Display participant payment eligibility | 🔴 Still blocked | OQ-1 (rule source) and OQ-2 (month definition) remain **Pending** per the study team. OQ-5 (E-RS D28→D42 extension handling) also **Pending**. No payment code written. |
+| **CR-06** | Enable retrospective timeline corrections | 🔴 Not started (Phase 3) | Unchanged from Phase 1 finding — architecture gap, not addressed this pass. |
+| **CR-07** | Timeline corrections must satisfy ALCOA+ | 🔴 Not started (Phase 3) | Unchanged from Phase 1 finding. |
+| **CR-08** | Merge Coordinator + Manager into one Navigator role | 🟡 Direction confirmed, not implemented (Phase 4) | Study team resolved OQ-7: Navigator = **full Manager privileges** (§8). This is a conscious acceptance of the SoD risk documented in §6 — the requester is the Manager-privilege holder. **No RBAC code has been changed.** Phase 4 will implement this against the §6 matrix, and the SoD risk acceptance should be recorded by whoever approves the Phase 4 PR. |
+| **CR-09** | Questionnaire collection must strictly begin at the screening visit | ✅ Resolved — no code change required | Study team (OQ-3): the SoA already places a questionnaire (CAT) at Screening; CR-09 is satisfied by that, and **CAT itself does not count toward the compliance %** because it is an eligibility assessment, not a compliance questionnaire. No conflict with the PSB-anchored daily-ePRO schedule remains — the daily instruments (DTQ/E-RS/WURSS) still start at PSB Day 1 per SoA; only CAT was ever the "at screening" item, and it's excluded from the % by design. Encoded in `QUESTIONNAIRE_EXCLUDED_CODES` (`lib/compliance.ts`). |
+| **CR-10** | Rescue Inhaler strictly excluded from compliance % | 🟢 Implemented (Phase 2) | `QUESTIONNAIRE_EXCLUDED_CODES` includes `PRN`, weight 0 in both numerator and denominator, plus the seed-data fix (see CR-03). Regression-guarded: CMP-006.4. |
 
 ---
 
@@ -231,9 +233,9 @@ a distinct grant (retain, don't delete, the underlying roles).
 
 | Axis | Impact |
 |---|---|
-| **Protocol** | CR-09 conflicts with the protocol's PSB-anchored ePRO start (§CR-09). No other CR changes protocol *rules*, but payment compliance introduces a business rule (80% monthly) that must be traced to an approved source (OQ-1). |
-| **SoA** | Questionnaire allow-list (§4.1) must be ratified against Table 1/Table 2. SGRQ schedule set `{1,8,16,24,32,40,48,64}` (`timeline.ts:534`) breaks the every-8-week cadence between W48→W64 (16-week gap) — reconcile before SGRQ enters any denominator (OQ-6). |
-| **Database** | New record types: payment-period compliance snapshot, timeline-correction envelope, hash-chained audit entry. `Patient` anchor-date edits must stop being destructive (`db.ts:108`). `Task.subcat`/category cleanup for PRN mis-bucketing (`data.ts:295,322,417`). |
+| **Protocol** | CR-09 resolved without contradiction (§8, OQ-3). Payment compliance still introduces a business rule (80% monthly) that must be traced to an approved source (OQ-1, still pending). |
+| **SoA** | Questionnaire allow-list (§4.1, implemented §12) ratified against the study team's answers. SGRQ schedule corrected to `{1,8,16,24,32,40,48,56,64}` (`timeline.ts`) per OQ-6 — 8-week cadence restored. |
+| **Database** | Payment-period compliance snapshot, timeline-correction envelope, hash-chained audit entry remain future work (Phases 3/CR-05). PRN mis-bucketing fixed at the seed-data root (`data.ts`, see §12) — no longer an open item. |
 | **API** | New pure calculators (questionnaire compliance, payment eligibility) mirroring the pure/idempotent style of `compliance.ts`/`operations.ts`. New capture path for corrections. All must be side-effect-free and unit-testable. |
 | **UI** | Relabel "Compliance Index" → separate **Questionnaire compliance**, **Task completion**, **Payment eligibility** tiles (`Dashboard.tsx`, `ManagerDashboard.tsx`, `StatsScreen.tsx`). Correction UI with mandatory reason. Role-gated controls if Navigator ships. |
 | **Reporting** | CSV/KPI export (`operations.ts:691-757`) gains payment-eligibility and questionnaire-compliance columns; must retain null-guarding (no `#DIV/0!`). Compliance figures in monitor exports must cite denominator basis. |
@@ -244,17 +246,23 @@ a distinct grant (retain, don't delete, the underlying roles).
 
 ---
 
-## 8. Open questions register (must be answered before the dependent phase builds)
+## 8. Open questions register
 
-| # | Question | Blocks | Why it cannot be assumed |
-|---|---|---|---|
-| **OQ-1** | Is the **80% payment threshold** an approved business rule, and what is its documented source? | CR-05 | The 0.8 constant exists for *ePRO adherence* (`compliance.ts:31`), not for payment. Reusing it for payment is an assumption. |
-| **OQ-2** | "Within a specific **calendar or study month**" — which? Calendar month, 28-day study month, or PSB-month from `psbStartDate`? | CR-05 | Denominator determinism depends on the exact window; the phrasing is ambiguous. |
-| **OQ-3** | CR-09: does "questionnaire collection begins at screening" refer to **CAT only**, or is it a request to move daily ePRO accrual earlier than the SoA schedules it? | CR-01/09 | SoA starts daily ePRO at PSB Day 1 (`timeline.ts:211-220`). Literal reading contradicts SoA. |
-| **OQ-4** | Should **HVIR (Home Virology)**, being conditional post-DTQ+, be excluded from questionnaire compliance the same way PRN is? | CR-03/10 | It is `category 'Q'` but conditional; treating it either way is a rule, not a given. |
-| **OQ-5** | For Treatment/FU, how is the **E-RS D28→D42 conditional extension** counted in the denominator (resolution-gated)? | CR-05 | The extension is conditional (`timeline.ts:103`); leaving it implicit breaks determinism. |
-| **OQ-6** | Is the SGRQ schedule `{1,8,16,24,32,40,48,64}` correct (note the W48→W64 gap)? | CR-05 (SGRQ) | The set breaks its own every-8-week pattern; a periodic denominator must be exact. |
-| **OQ-7** | Is a merged **Navigator** intended to hold Manager privileges (protocol authoring, key/activation custody), or only Coordinator + read-only Manager visibility? | CR-08 | Determines whether SoD boundaries are crossed. |
+| # | Question | Blocks | Status | Resolution |
+|---|---|---|---|---|
+| **OQ-1** | Is the **80% payment threshold** an approved business rule, and what is its documented source? | CR-05 | 🔴 **Pending** — elevated to study team | — |
+| **OQ-2** | "Within a specific **calendar or study month**" — which? | CR-05 | 🔴 **Pending** — elevated to study team | — |
+| **OQ-3** | CR-09: does "questionnaire collection begins at screening" refer to **CAT only**, or move daily ePRO accrual earlier? | CR-01/09 | ✅ **Resolved** (2026-08-10) | Study team: documented rationale exists for the earlier start; **CAT is excluded from the % — it is an eligibility assessment, not compliance.** Implemented in §12; no SoA schedule change was required (see CR-09 verdict above). |
+| **OQ-4** | Should **HVIR (Home Virology)** be excluded from questionnaire compliance the same way PRN is? | CR-03/10 | ✅ **Resolved** (2026-08-10) | Study team: **Yes** — "compliance is only for the questionnaires, to make sure they are completing them as much as they can." HVIR (a conditional diagnostic self-collection, not a patient-reported instrument) is excluded. Implemented in §12. |
+| **OQ-5** | For Treatment/FU, how is the **E-RS D28→D42 conditional extension** counted in the denominator? | CR-05 | 🔴 **Pending** — elevated to study team | — |
+| **OQ-6** | Is the SGRQ schedule `{1,8,16,24,32,40,48,64}` correct (note the W48→W64 gap)? | CR-05 (SGRQ) | ✅ **Resolved** (2026-08-10) | Study team: **Week 56 also required.** `PSB_SGRQ_WEEKS` corrected to `{1,8,16,24,32,40,48,56,64}` in `lib/timeline.ts`, restoring the 8-week cadence. |
+| **OQ-7** | Is a merged **Navigator** intended to hold Manager privileges, or only Coordinator + read-only Manager visibility? | CR-08 | ✅ **Resolved** (2026-08-10) | Study team: **Full Manager privileges** ("we will be the ones using the app"). This is a knowing acceptance of the SoD risk in §6 by the party who will hold the elevated access. **Not yet implemented** — scoped to Phase 4, to be built against the §6 permission matrix so the acceptance is traceable in that PR. |
+
+CR-05 (payment eligibility) remains blocked in full: OQ-1, OQ-2, and OQ-5 are all still pending and are
+all load-bearing for a deterministic monthly denominator. Do not approximate a payment percentage from
+the questionnaire-compliance engine in §12 — that engine is explicitly scoped to the current-visit
+snapshot, not a calendar/study-month window, and mixing the two would fabricate precision the app does
+not have (violates the determinism/idempotency quality gate).
 
 ---
 
@@ -266,9 +274,10 @@ a distinct grant (retain, don't delete, the underlying roles).
 - **R2 — Denominator drift / non-idempotency.** Conditional items (PRN, HVIR, E-RS D28→D42) leaking into
   a denominator make the same patient-day yield different results. Mitigation: allow-list + explicit
   conditional gates + property tests asserting idempotency.
-- **R3 — Data-quality landmine (PRN mis-bucketing).** `tasks.q` cannot be trusted as "the
-  questionnaires" (`data.ts:295,322,417`). Mitigation: never derive scoring membership from the seed
-  array; also fix the seed and add a test asserting PRN ∉ questionnaire set for all patients.
+- **R3 — Data-quality landmine (PRN mis-bucketing). ✅ Mitigated (Phase 2, §12).** `tasks.q` could not be
+  trusted as "the questionnaires." Fixed at the root (seed data corrected) and defended in code (explicit
+  allow-list independent of array placement) with a standing regression test (CMP-006.8) asserting
+  PRN ∉ `tasks.q` for every seeded patient.
 - **R4 — Destructive correction.** Any correction path built on the current in-place `savePatient`
   destroys the original value → ALCOA+ violation. Mitigation: append-only envelope before any correction
   UI ships.
@@ -284,13 +293,13 @@ a distinct grant (retain, don't delete, the underlying roles).
 
 | Phase | Scope | Entry criteria | Exit criteria (quality gate) |
 |---|---|---|---|
-| **1 — Requirement validation & gap analysis** | *This document.* | — | Stakeholder answers to OQ-1…OQ-7; CR-09 protocol reconciliation. |
-| **2 — Compliance engine redesign** | Questionnaire allow-list; three domains; deterministic denominators; E-RS-immediate/PRN-weight-0 idempotency. | OQ-1,2,4,5,6 resolved. | Pure, idempotent calculators + unit tests; old vs new diff report; zero protocol contradictions. |
-| **3 — Timeline auditability** | Correction envelope; append-only hash-chained ledger; non-destructive anchor edits. | Correction fields + retention rules approved. | Original-state reconstruction demonstrated; physical delete impossible; ALCOA+ fields enforced. |
-| **4 — Permission consolidation** | Navigator capability model from the §6 matrix; SoD sign-off. | OQ-7 resolved; matrix approved. | No privilege escalation vs as-is; underlying roles retained; documented conflicts resolved. |
-| **5 — UI & reporting** | Split tiles (Questionnaire / Task / Payment); correction UI; export columns. | Phases 2–4 merged. | No metric mislabeled "compliance"; exports null-guarded and denominator-annotated. |
-| **6 — Regression testing** | Extend `soa-compliance.test.ts` + add compliance/idempotency/audit suites. | Phases 2–5 code-complete. | All existing tests green; new determinism & SoD tests green; zero silent regressions. |
-| **7 — Validation & release readiness** | Traceability matrix (CR → code → test), GxP review, monitor walkthrough. | Phase 6 green. | Quality gate §11 fully satisfied and signed. |
+| **1 — Requirement validation & gap analysis** ✅ Done | *This document.* | — | Stakeholder answers to OQ-1…OQ-7; CR-09 protocol reconciliation. |
+| **2 — Compliance engine redesign** 🟡 Partial (§12) | Questionnaire allow-list; three domains; deterministic denominators; E-RS-immediate/PRN-weight-0 idempotency. | OQ-1,2,4,5,6 resolved. | **Questionnaire-compliance portion done** (OQ-3,4,6 resolved). **Payment-eligibility portion still blocked** — OQ-1, OQ-2, OQ-5 pending. |
+| **3 — Timeline auditability** ⬜ Not started | Correction envelope; append-only hash-chained ledger; non-destructive anchor edits. | Correction fields + retention rules approved. | Original-state reconstruction demonstrated; physical delete impossible; ALCOA+ fields enforced. |
+| **4 — Permission consolidation** ⬜ Not started (direction confirmed) | Navigator capability model from the §6 matrix; SoD sign-off. | OQ-7 resolved ✅. | No privilege escalation vs as-is; underlying roles retained; documented conflicts resolved; SoD acceptance recorded in the implementing PR. |
+| **5 — UI & reporting** ⬜ Not started | Split tiles (Questionnaire / Task / Payment); correction UI; export columns. | Phases 2–4 merged. | No metric mislabeled "compliance"; exports null-guarded and denominator-annotated. |
+| **6 — Regression testing** 🟡 Ongoing | Extend `soa-compliance.test.ts` + add compliance/idempotency/audit suites. | Phases 2–5 code-complete. | All existing tests green; new determinism & SoD tests green; zero silent regressions. CMP-006 added this pass (§12); full suite green (322/322). |
+| **7 — Validation & release readiness** ⬜ Not started | Traceability matrix (CR → code → test), GxP review, monitor walkthrough. | Phase 6 green. | Quality gate §11 fully satisfied and signed. |
 
 ---
 
@@ -298,12 +307,83 @@ a distinct grant (retain, don't delete, the underlying roles).
 
 | Requirement | Status in this document |
 |---|---|
-| Zero undocumented assumptions | ✅ All unknowns raised as OQ-1…OQ-7, none resolved silently. |
-| Zero protocol contradictions | ✅ Contradictions (CR-06/07/08/09, PRN data) are **flagged**, not baked in. |
-| Zero silent regressions | ✅ Old-vs-new diff + regression-suite extension mandated (Phases 2, 6; R1). |
-| Mathematical determinism in denominators (idempotency) | ✅ Allow-list + per-phase denominators + conditional-item gates specified (§4). |
-| Explicit identification of unknowns | ✅ §8. |
-| Protocol evidence over stakeholder interpretation | ✅ Higher-priority SoA wins on CR-09; all claims cite file/line or SoA. |
+| Zero undocumented assumptions | ✅ OQ-1,2,5 remain open and are **not** approximated; OQ-3,4,6,7 resolved by explicit stakeholder answer, quoted in §8. |
+| Zero protocol contradictions | ✅ CR-09 reconciled without contradicting the SoA (§8, §3). Remaining architecture gaps (CR-06/07) and RBAC change (CR-08) are flagged, not built around a guess. |
+| Zero silent regressions | ✅ Full suite green (322/322, 18 files) after Phase 2 changes; new CMP-006 suite added; existing `soa-compliance.test.ts` unaffected. |
+| Mathematical determinism in denominators (idempotency) | ✅ Questionnaire-compliance allow-list is a closed set, immune to task-array placement (§12); PRN and HVIR are weight-0 by construction, not by data hygiene alone. Payment-domain determinism remains blocked pending OQ-1/2/5 — **not attempted** rather than approximated. |
+| Explicit identification of unknowns | ✅ §8, kept current with resolution dates and quoted answers. |
+| Protocol evidence over stakeholder interpretation | ✅ CR-09's resolution keeps the SoA's PSB-anchored daily-ePRO schedule unchanged; only the already-SoA-compliant CAT-at-screening item was in question. |
 
-> **Handoff note:** This is the Phase 1 analysis only. No compliance formula, role change, timeline
-> mutation, or schema change has been implemented. Phases 2–7 are gated on the Open Questions above.
+> **Handoff note:** Phase 1 (this document) is complete. Phase 2 is **partially** implemented: the
+> questionnaire-compliance engine (CR-01/02/03/04(engine)/09/10) is done and tested; the payment-eligibility
+> engine (CR-05) remains blocked on OQ-1/2/5. No timeline-audit (Phase 3), RBAC (Phase 4), or UI (Phase 5)
+> code has been written — CR-06/07/08 direction is recorded but not implemented. See §12 for the exact diff.
+
+---
+
+## 12. Phase 2 implementation log (this pass)
+
+Scope of this pass: build the **questionnaire-compliance** portion of the engine using the study team's
+resolved open questions (OQ-3, OQ-4, OQ-6, and — for scoping purposes only — OQ-7). Payment eligibility
+(CR-05) was **not** touched: OQ-1, OQ-2, OQ-5 are still pending and are load-bearing for a deterministic
+monthly denominator, so nothing was built that would require guessing them.
+
+### 12.1 `lib/compliance.ts` — new questionnaire-compliance calculator
+
+Added `QUESTIONNAIRE_CODES` (`DTQ`, `ERS`, `WURSS`, `SGRQ`), `QUESTIONNAIRE_EXCLUDED_CODES` (`PRN`,
+`HVIR`, `CAT`, `IC`), and `computeQuestionnaireCompliance(patient)`, which returns `{ done, total, pct }`
+over the confirmed allow-list only, scanning **all** of `patient.tasks` (`q`/`pr`/`l`/`ad`) rather than
+trusting the `q` array — this is what makes the exclusion of PRN/CAT/HVIR/IC hold even though they are
+(or, for PRN, previously were) present under a `Q`-labelled task. `pct` is `null`, never a fabricated `0`,
+when no in-scope questionnaire is present in the current snapshot — consistent with the null-guarding
+convention already used by `deriveCumulativeAdherence` and `safeAverage`/`safeRatio` in `operations.ts`.
+
+**Explicit scope boundary:** this function is the **current-visit-snapshot** questionnaire completion —
+it mirrors how `countTasks` already scopes "task completion" in this app (today's task list, not a
+longitudinal record). It is **not** the CR-05 payment-eligibility percentage, which needs a per-day
+submission history and a defined calendar/study-month window that do not exist yet. The two must not be
+conflated; doing so would fabricate the precision the determinism/idempotency quality gate forbids.
+
+### 12.2 `lib/data.ts` — PRN seed-data correction (CR-03/CR-10 root cause)
+
+`PRN` ("COPD PRN Inhaler Use") was present inside `tasks.q` for three seeded patients — HMC-012, CUN-023,
+CUN-058 — while the canonical SoA matrix classifies it `AD` (`ALL_MATRIX_ROWS`, `lib/timeline.ts`). Moved
+to `tasks.ad` for all three, matching the other six patients and the canonical classification. This is a
+root-cause fix, not just a code-side workaround; §12.1's allow-list is a second, independent layer that
+holds even if a similar miscategorization is reintroduced.
+
+### 12.3 `lib/timeline.ts` — SGRQ Week 56 (OQ-6)
+
+`PSB_SGRQ_WEEKS` changed from `{1,8,16,24,32,40,48,64}` to `{1,8,16,24,32,40,48,56,64}` per the study
+team's confirmation, restoring the every-8-week cadence between Week 48 and Week 64.
+
+### 12.4 Tests
+
+`tests/unit/compliance.test.ts` gained suite `CMP-006` (8 cases): allow-list/exclusion-set content,
+PR/L/AD never counted (CR-03), PRN excluded even when placed in `tasks.q` (CR-10 regression guard), CAT/
+HVIR/IC excluded despite being category `Q` in the SoA, `pct: null` on an empty in-scope set, a 100%
+happy path, and a standing regression assertion that no seeded patient has `PRN` in `tasks.q` (CMP-006.8
+— fails immediately if §12.2's fix is ever reverted or reintroduced elsewhere).
+
+### 12.5 Verification
+
+- `npx vitest run` — **322/322 tests passing, 18/18 files**, including the unmodified
+  `tests/unit/soa-compliance.test.ts` regression suite (confirms the SGRQ/PRN changes did not disturb
+  existing SoA contract tests).
+- `npx tsc --noEmit` — no new type errors. The only errors present (`crypto-001-003.test.ts`,
+  `audit-004-db-007.test.ts`) are pre-existing and in files untouched by this pass (confirmed by scope —
+  neither file was edited).
+
+### 12.6 What was deliberately NOT done in this pass
+
+- **CR-05 (payment eligibility):** no code. OQ-1/2/5 pending.
+- **CR-04 UI relabeling, CR-01 UI surfacing:** the calculators exist and are tested; wiring them into
+  `Dashboard.tsx` / `ManagerDashboard.tsx` / `StatsScreen.tsx` (and relabeling "Compliance Index") is
+  Phase 5, scoped separately so the UI redesign (which must also decide how "Task completion" is
+  presented, per CR-04) can be done as one coherent, reviewable change rather than piecemeal.
+- **CR-06/07 (timeline auditability):** Phase 3, unstarted, independent of today's answers.
+- **CR-08 (Navigator role merge):** OQ-7 is now resolved (full Manager privileges), but **no RBAC code
+  was changed**. This is explicitly Phase 4 and was kept out of this pass because it is a security-
+  sensitive, separately-reviewable change (§6) — bundling an SoD-risk-accepting role merge into the same
+  commit as compliance-calculation logic would make both harder to review and harder to roll back
+  independently.
