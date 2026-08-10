@@ -292,13 +292,13 @@ export const PATIENTS: Patient[] = [
         { code: 'ERS', label: 'E-RS / PGIS (EXACT)', icon: '📋', done: false, note: 'Daily — record in eDiary' },
         { code: 'WURSS', label: 'WURSS-11', icon: '📋', done: false, note: 'Daily — record in eDiary' },
         { code: 'SGRQ', label: "SGRQ — Saint George's Respiratory Questionnaire", icon: '📋', done: false, periodic: true, note: '⚠ DUE: Day 56 (Week 8) — per Table 2. Next: approx. every 2 months during Asymptomatic Phase' },
-        { code: 'PRN', label: 'COPD PRN Inhaler Use', icon: '💨', done: true, note: 'Collected with E-RS' },
       ],
       pr: [], l: [],
       ad: [
         { code: 'MC', label: 'Monthly Phone/Telehealth Call', icon: '📞', done: false, urgent: true, note: '⚠ Due: Week 8 (Day 56-58) ± 5-day window. Discuss: comorbidities, COPD meds, infections, hospitalisations (fn. m)', subcat: 'fup' },
         { code: 'CMED', label: 'Concomitant Medications — any changes since last call', icon: '💊', done: false, note: 'Collected during monthly call (fn. l)', subcat: 'fup' },
         { code: 'HOSP', label: 'COPD-related Hospitalisations', icon: '🏥', done: false, subcat: 'fup' },
+        { code: 'PRN', label: 'COPD PRN Inhaler Use', icon: '💨', done: true, note: 'Collected with E-RS', subcat: 'general' },
       ]
     },
     ers: [5, 4, 6, 5, 4, 5, 6, 5, 4, 3, 5, 4, 5, 6, 5, 4, 5, 6, 5, 4, 5, 4, 5, 6, 5, 4, 5, 6, 5, 5],
@@ -319,12 +319,12 @@ export const PATIENTS: Patient[] = [
         { code: 'DTQ', label: 'Daily Trigger Questionnaire', icon: '🔔', done: false },
         { code: 'ERS', label: 'E-RS / PGIS (EXACT)', icon: '📋', done: false, note: 'Daily' },
         { code: 'WURSS', label: 'WURSS-11', icon: '📋', done: false, note: 'Daily' },
-        { code: 'PRN', label: 'COPD PRN Inhaler Use', icon: '💨', done: false, note: 'Collected with E-RS' },
       ],
       pr: [], l: [],
       ad: [
         { code: 'CMED', label: 'Concomitant Medications — record any changes', icon: '💊', done: false, note: 'Document new/changed ConMeds since last contact (fn. l)', subcat: 'fup' },
         { code: 'HOSP', label: 'COPD-related Hospitalisations', icon: '🏥', done: false, subcat: 'fup' },
+        { code: 'PRN', label: 'COPD PRN Inhaler Use', icon: '💨', done: false, note: 'Collected with E-RS', subcat: 'general' },
       ]
     },
     ers: [6, 5, 7, 6, 5, 6, 7, 5, 4, 6, 7, 6, 5, 6, 7, 8, 6, 5, 6, 7, 6, 5, 4, 6, 7, 6, 5, 6, 7, 6],
@@ -414,12 +414,12 @@ export const PATIENTS: Patient[] = [
         { code: 'DTQ', label: 'Daily Trigger Questionnaire', icon: '🔔', done: true, note: 'Answer: NO' },
         { code: 'ERS', label: 'E-RS / PGIS (EXACT)', icon: '📋', done: true },
         { code: 'WURSS', label: 'WURSS-11', icon: '📋', done: true },
-        { code: 'PRN', label: 'COPD PRN Inhaler Use', icon: '💨', done: true },
       ],
       pr: [], l: [],
       ad: [
         { code: 'MC', label: 'Monthly Call', icon: '📞', done: true, note: 'Week 50 call completed', subcat: 'fup' },
         { code: 'CMED', label: 'Concomitant Medications', icon: '💊', done: true, subcat: 'fup' },
+        { code: 'PRN', label: 'COPD PRN Inhaler Use', icon: '💨', done: true, subcat: 'general' },
       ]
     },
     ers: [4, 3, 5, 4, 3, 4, 5, 4, 3, 4, 5, 4, 3, 4, 5, 3, 4, 5, 4, 3, 4, 5, 4, 3, 4, 5, 4, 3, 4, 4],

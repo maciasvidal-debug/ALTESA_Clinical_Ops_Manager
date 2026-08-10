@@ -25,7 +25,7 @@
  * result, not a gap.
  */
 
-import { diffDays, getToday, type Patient } from './data';
+import { diffDays, getToday, type Patient, type Task } from './data';
 
 /** Protocol adherence threshold below which a patient is flagged non-compliant. */
 export const ADHERENCE_THRESHOLD = 0.8;
@@ -145,4 +145,68 @@ export function autoNonCompliantIds(
   today: Date = getToday(),
 ): Set<string> {
   return new Set(patients.filter((p) => isBelowAdherence(p, threshold, today)).map((p) => p.id));
+}
+
+// ── Layer 3: Questionnaire-only compliance (CR-01 / CR-02 / CR-03 / CR-04 / CR-10) ──
+//
+// Confirmed with the study team (protocol/business-rule findings + resolved
+// open questions):
+//   - In scope:  DTQ, E-RS/PGIS, WURSS, SGRQ (CR-02; protocol findings).
+//   - CAT is OUT — it is an eligibility assessment, not a compliance
+//     questionnaire (OQ-3 resolution).
+//   - HVIR (Home Virology) is OUT — a conditional, non-deterministic
+//     collection triggered post-DTQ+, not a patient-reported questionnaire
+//     the study team wants tracked for completion (OQ-4 resolution).
+//   - PRN (Rescue Inhaler) is OUT — conditional PRN event, weight 0 in both
+//     numerator and denominator (CR-10; protocol findings).
+//   - IC is OUT — an administrative attestation, not an ePRO.
+//   - Non-questionnaire activities (PR/L/AD categories generally) never
+//     affect this number (CR-03).
+//
+// This is an EXPLICIT allow-list, not a derivation from which `patient.tasks`
+// array a code happens to live in. The seed data for HMC-012 / CUN-023 /
+// CUN-058 previously placed PRN inside `tasks.q` — trusting category alone
+// would have silently counted the Rescue Inhaler as a questionnaire. The
+// seed data has been corrected, but the calculator is defended by code
+// (`QUESTIONNAIRE_EXCLUDED_CODES`) rather than by data hygiene alone, since
+// CAT and HVIR are legitimately `category: 'Q'` in the SoA yet must still be
+// excluded here.
+
+/** Protocol ePRO instruments that count toward questionnaire compliance. */
+export const QUESTIONNAIRE_CODES: ReadonlySet<string> = new Set(['DTQ', 'ERS', 'WURSS', 'SGRQ']);
+
+/**
+ * Codes explicitly excluded from questionnaire compliance even if they carry
+ * a Q-category label or appear (due to a data error) inside `tasks.q`.
+ */
+export const QUESTIONNAIRE_EXCLUDED_CODES: ReadonlySet<string> = new Set(['PRN', 'HVIR', 'CAT', 'IC']);
+
+export type QuestionnaireCompliance = {
+  done: number;
+  total: number;
+  /** null (render "—") when no in-scope questionnaire is present in this snapshot — never a fabricated 0. */
+  pct: number | null;
+};
+
+/**
+ * Current-visit-scoped questionnaire completion: done/total across the
+ * confirmed questionnaire allow-list only. Independent of which
+ * `patient.tasks` array a code is placed in (defends against the PRN
+ * miscategorization found during the gap analysis) and independent of
+ * completion in every other domain — procedures, labs, and admin tasks never
+ * move this number (CR-03).
+ *
+ * Scope note: this reflects the patient's CURRENT task snapshot (today's
+ * visit), matching how `countTasks` already scopes "task completion" in this
+ * app. It is NOT the monthly payment-eligibility percentage (CR-05 /
+ * payment_compliance domain) — that requires a per-day submission history and
+ * a defined calendar/study-month window not yet available (open: calendar-vs-
+ * study-month window definition, and the Day 28→42 E-RS extension handling).
+ */
+export function computeQuestionnaireCompliance(p: Patient): QuestionnaireCompliance {
+  const all: Task[] = ([] as Task[]).concat(p.tasks.q, p.tasks.pr, p.tasks.l, p.tasks.ad);
+  const inScope = all.filter((t) => QUESTIONNAIRE_CODES.has(t.code) && !QUESTIONNAIRE_EXCLUDED_CODES.has(t.code));
+  const total = inScope.length;
+  const done = inScope.filter((t) => t.done).length;
+  return { done, total, pct: total > 0 ? Math.round((done / total) * 100) : null };
 }

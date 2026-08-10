@@ -9,6 +9,7 @@
  *   CMP-003  threshold + null-ratio neutrality
  *   CMP-004  deriveCumulativeAdherence — from psbRecords vs PSB days
  *   CMP-005  isBelowAdherence / autoNonCompliantIds
+ *   CMP-006  computeQuestionnaireCompliance — CR-01/02/03/04/10 questionnaire-only metric
  */
 
 import { describe, it, expect } from 'vitest';
@@ -19,10 +20,13 @@ import {
   isBelowAdherence,
   autoNonCompliantIds,
   ADHERENCE_THRESHOLD,
+  computeQuestionnaireCompliance,
+  QUESTIONNAIRE_CODES,
+  QUESTIONNAIRE_EXCLUDED_CODES,
   type AdherenceSample,
 } from '@/lib/compliance';
-import type { Patient } from '@/lib/data';
-import { addDays, getToday } from '@/lib/data';
+import type { Patient, Task } from '@/lib/data';
+import { addDays, getToday, PATIENTS } from '@/lib/data';
 
 // full-adherence day / missed day helpers
 const day = (d: string, submitted: number, expected = 1): AdherenceSample => ({ date: d, expected, submitted });
@@ -170,5 +174,85 @@ describe('CMP-005 — isBelowAdherence / autoNonCompliantIds', () => {
 
   it('CMP-005.3 — threshold constant is 0.8', () => {
     expect(ADHERENCE_THRESHOLD).toBe(0.8);
+  });
+});
+
+// ── CMP-006 ───────────────────────────────────────────────────────────────────
+
+const task = (code: string, done: boolean, extra: Partial<Task> = {}): Task =>
+  ({ code, label: code, icon: '', done, ...extra } as Task);
+
+describe('CMP-006 — computeQuestionnaireCompliance', () => {
+  it('CMP-006.1 — allow-list is exactly DTQ, ERS, WURSS, SGRQ', () => {
+    expect([...QUESTIONNAIRE_CODES].sort()).toEqual(['DTQ', 'ERS', 'SGRQ', 'WURSS']);
+  });
+
+  it('CMP-006.2 — exclusion set is exactly PRN, HVIR, CAT, IC', () => {
+    expect([...QUESTIONNAIRE_EXCLUDED_CODES].sort()).toEqual(['CAT', 'HVIR', 'IC', 'PRN']);
+  });
+
+  it('CMP-006.3 — counts only in-scope questionnaires, ignores PR/L/AD activities entirely (CR-03)', () => {
+    const p = patient({
+      tasks: {
+        q: [task('DTQ', true), task('ERS', false)],
+        pr: [task('SPI', false), task('OSC', true)],
+        l: [task('CSL', true)],
+        ad: [task('CMED', true), task('AE', false)],
+      },
+    });
+    const r = computeQuestionnaireCompliance(p);
+    expect(r.total).toBe(2); // DTQ + ERS only — PR/L/AD never counted
+    expect(r.done).toBe(1);
+    expect(r.pct).toBe(50);
+  });
+
+  it('CMP-006.4 — PRN never contributes even when miscategorized into tasks.q (CR-10 / CR-03 regression guard)', () => {
+    const p = patient({
+      tasks: {
+        q: [task('DTQ', true), task('ERS', true), task('WURSS', true), task('PRN', false)],
+        pr: [], l: [], ad: [],
+      },
+    });
+    const r = computeQuestionnaireCompliance(p);
+    expect(r.total).toBe(3); // PRN excluded from denominator
+    expect(r.done).toBe(3);
+    expect(r.pct).toBe(100); // PRN's `done: false` cannot drag this down — weight 0
+  });
+
+  it('CMP-006.5 — HVIR and CAT and IC never contribute even though they are category Q in the SoA', () => {
+    const p = patient({
+      tasks: {
+        q: [task('DTQ', true), task('HVIR', false), task('CAT', false), task('IC', true)],
+        pr: [], l: [], ad: [],
+      },
+    });
+    const r = computeQuestionnaireCompliance(p);
+    expect(r.total).toBe(1);
+    expect(r.done).toBe(1);
+    expect(r.pct).toBe(100);
+  });
+
+  it('CMP-006.6 — no in-scope questionnaire present ⇒ pct is null, not a fabricated 0', () => {
+    const p = patient({ tasks: { q: [], pr: [task('SPI', true)], l: [], ad: [] } });
+    const r = computeQuestionnaireCompliance(p);
+    expect(r.total).toBe(0);
+    expect(r.pct).toBeNull();
+  });
+
+  it('CMP-006.7 — all four in-scope codes present and complete ⇒ 100%', () => {
+    const p = patient({
+      tasks: {
+        q: [task('DTQ', true), task('ERS', true), task('WURSS', true), task('SGRQ', true)],
+        pr: [], l: [], ad: [],
+      },
+    });
+    const r = computeQuestionnaireCompliance(p);
+    expect(r).toEqual({ done: 4, total: 4, pct: 100 });
+  });
+
+  it('CMP-006.8 — seed data regression guard: PRN is not present in tasks.q for any seeded patient', () => {
+    for (const p of PATIENTS) {
+      expect(p.tasks.q.some((t) => t.code === 'PRN'), `${p.id} has PRN in tasks.q`).toBe(false);
+    }
   });
 });
